@@ -5,7 +5,7 @@
 # If the script is run multiple times, it destroys any existing local session and creates a new one.
 
 # Session names
-LOCAL_SESSION_NAME="multi-connect"
+LOCAL_SESSION_NAME="multi-ssh"
 REMOTE_SESSION_NAME="remote-session"
 
 # Remote user to switch to after connecting
