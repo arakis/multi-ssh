@@ -64,6 +64,11 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     
     # Send SSH command to the window
     tmux send-keys -t $LOCAL_SESSION_NAME:$i "ssh -t $server '$remote_cmd'" C-m
+
+    # if remote user is set, send sudo su $REMOTE_USER
+    if [ -n "$REMOTE_USER" ]; then
+        tmux send-keys -t $LOCAL_SESSION_NAME:$i "sudo su $REMOTE_USER" C-m
+    fi
 done
 
 # Attach to the local tmux session
