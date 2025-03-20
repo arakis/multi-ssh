@@ -20,17 +20,29 @@ display_help() {
     echo "  --kill                     Kill remote tmux sessions and exit"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
-    echo "  --remote-user <username>   Switch to this user after connecting
+    echo "  --remote-user <username>   Switch to this user after connecting"
     echo "  --ssh-user <username>      SSH login username"
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
+    echo "  --config <path>            Path to servers configuration file (default: ./servers.conf)"
     echo
     echo "If no command is specified with --send-keys or --exec, commands from servers.conf will be used."
+    echo
+    echo "Configuration file format (servers.conf):"
+    echo "  Each line should contain a server address/hostname, optionally followed by a command."
+    echo "  Format: <server> [command]"
+    echo "  Examples:"
+    echo "    server1.example.com"
+    echo "    server2.example.com ls -la /var/log"
+    echo "    192.168.1.10 htop"
+    echo "  Lines starting with # are treated as comments and ignored."
+    echo "  Empty lines are also ignored."
     echo
     echo "Examples:"
     echo "  multi-ssh                                   # Connect to all servers"
     echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
     echo "  multi-ssh --exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
     echo "  multi-ssh --kill                            # Kill all remote tmux sessions"
+    echo "  multi-ssh --config ~/my-servers.conf        # Use a custom servers configuration file"
     exit 0
 }
 
@@ -44,6 +56,9 @@ REMOTE_USER=""
 # Default SSH connection options
 SSH_USER=""
 SSH_KEY=""
+
+# Default config file path
+CONFIG_FILE="servers.conf"
 
 # Default options
 SYNCHRONIZE_PANES=false
@@ -136,6 +151,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --config)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                CONFIG_FILE="$2"
+                shift 2
+            else
+                echo "Error: --config requires a path to configuration file"
+                exit 1
+            fi
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Use --help to display available options"
@@ -170,13 +194,13 @@ if tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
     tmux kill-session -t $LOCAL_SESSION_NAME
 fi
 
-# Check if servers.conf exists
-if [ ! -f servers.conf ]; then
-    echo "Error: servers.conf not found."
+# Check if specified config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file '$CONFIG_FILE' not found."
     exit 1
 fi
 
-# Load servers from servers.conf
+# Load servers from the config file
 servers=()
 server_commands=()
 while IFS= read -r line; do
@@ -190,11 +214,11 @@ while IFS= read -r line; do
         servers+=("$server")
         server_commands+=("$command")
     fi
-done < servers.conf
+done < "$CONFIG_FILE"
 
-# Ensure servers.conf has at least one server
+# Ensure config file has at least one server
 if [ ${#servers[@]} -eq 0 ]; then
-    echo "No servers found in servers.conf"
+    echo "No servers found in '$CONFIG_FILE'"
     exit 1
 fi
 
