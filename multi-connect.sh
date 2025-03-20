@@ -8,6 +8,9 @@
 LOCAL_SESSION_NAME="multi-connect"
 REMOTE_SESSION_NAME="remote-session"
 
+# Remote user to switch to after connecting
+REMOTE_USER="creatica"
+
 # Check if tmux is installed
 if ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
@@ -47,16 +50,19 @@ tmux new-session -d -s $LOCAL_SESSION_NAME
 # Define the remote command to check for existing session and create or attach
 remote_cmd="if tmux has-session -t $REMOTE_SESSION_NAME 2>/dev/null; then tmux attach-session -t $REMOTE_SESSION_NAME; else tmux new-session -s $REMOTE_SESSION_NAME; fi"
 
-# Process the first server
-first_server=${servers[0]}
-tmux rename-window -t $LOCAL_SESSION_NAME:0 "$first_server"
-tmux send-keys -t $LOCAL_SESSION_NAME:0 "ssh -t $first_server '$remote_cmd'" C-m
-
-# Process each additional server
-for i in $(seq 1 $((${#servers[@]}-1))); do
+# Process all servers in a single loop
+for i in $(seq 0 $((${#servers[@]}-1))); do
     server=${servers[$i]}
-    # Create a new window instead of splitting the existing one
-    tmux new-window -t $LOCAL_SESSION_NAME: -n "$server"
+    
+    if [ $i -eq 0 ]; then
+        # For the first server, rename the initial window
+        tmux rename-window -t $LOCAL_SESSION_NAME:0 "$server"
+    else
+        # For additional servers, create a new window
+        tmux new-window -t $LOCAL_SESSION_NAME: -n "$server"
+    fi
+    
+    # Send SSH command to the window
     tmux send-keys -t $LOCAL_SESSION_NAME:$i "ssh -t $server '$remote_cmd'" C-m
 done
 
