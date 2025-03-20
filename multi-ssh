@@ -15,6 +15,7 @@ REMOTE_USER="creatica"
 SYNCHRONIZE_PANES=false
 SEND_KEYS_COMMAND=""
 USE_SERVER_COMMAND=false
+EXECUTE_COMMAND=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -23,7 +24,10 @@ while [[ $# -gt 0 ]]; do
             SYNCHRONIZE_PANES=true
             shift
             ;;
-        --send-keys)
+        --send-keys|--exec)
+            if [[ "$1" == "--exec" ]]; then
+                EXECUTE_COMMAND=true
+            fi
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
                 SEND_KEYS_COMMAND="$2"
                 shift 2
@@ -35,7 +39,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Available options: --syncronize-panes, --send-keys ['command']"
+            echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command']"
             exit 1
             ;;
     esac
@@ -128,13 +132,23 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     # Now run the tmux command after potential user switch
     tmux send-keys -t "$target" "$remote_cmd" C-m
     
-    # Send additional command if specified
+    # Determine which command to use (if any)
+    command_to_send=""
     if [ "$USE_SERVER_COMMAND" = true ] && [ -n "$server_command" ]; then
         # Use server-specific command from servers.conf
-        tmux send-keys -t "$target" "$server_command"
+        command_to_send="$server_command"
     elif [ -n "$SEND_KEYS_COMMAND" ]; then
-        # Use global command specified with --send-keys
-        tmux send-keys -t "$target" "$SEND_KEYS_COMMAND"
+        # Use global command specified with --send-keys or --exec
+        command_to_send="$SEND_KEYS_COMMAND"
+    fi
+    
+    # Send the command if one was determined
+    if [ -n "$command_to_send" ]; then
+        tmux send-keys -t "$target" "$command_to_send"
+        # Add ENTER if in execute mode
+        if [ "$EXECUTE_COMMAND" = true ]; then
+            tmux send-keys -t "$target" C-m
+        fi
     fi
 done
 
