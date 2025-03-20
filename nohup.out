@@ -27,3 +27,7 @@
 [90m[main 2025-03-20T18:38:50.274Z][0m updateURL https://api2.cursor.sh/updates/api/update/linux-x64/cursor/0.45.14/44eab18a9f82066f776b173cb7ed995b77b02c539a78814b8a52a18739e4f533
 [90m[main 2025-03-20T18:38:50.275Z][0m update#setState idle
 [91m[main 2025-03-20T18:38:52.062Z][0m vscode-file: Refused to load resource /tmp/.mount_cursor37REKW/resources/app/extensions/theme-seti/icons/seti.woff from vscode-file: protocol (original URL: vscode-file://vscode-app/tmp/.mount_cursor37REKW/resources/app/extensions/theme-seti/icons/seti.woff)
+[90m[main 2025-03-20T18:39:20.276Z][0m update#setState checking for updates
+[90m[main 2025-03-20T18:39:21.387Z][0m update#setState ready
+[3086640:0320/194954.634887:ERROR:browser_main_loop.cc(283)] GLib-GObject: ../glib/gobject/gsignal.c:2684: instance '0x3cfc0192db80' has no handler with id '2389'
+[3086640:0320/195306.065011:ERROR:browser_main_loop.cc(283)] GLib-GObject: ../glib/gobject/gsignal.c:2684: instance '0x3cfc0192db80' has no handler with id '2627'

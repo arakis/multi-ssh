@@ -55,9 +55,9 @@ tmux send-keys -t $LOCAL_SESSION_NAME:0 "ssh -t $first_server '$remote_cmd'" C-m
 # Process each additional server
 for i in $(seq 1 $((${#servers[@]}-1))); do
     server=${servers[$i]}
-    tmux split-window -t $LOCAL_SESSION_NAME:0
-    tmux send-keys "ssh -t $server '$remote_cmd'" C-m
-    tmux select-layout -t $LOCAL_SESSION_NAME:0 tiled
+    # Create a new window instead of splitting the existing one
+    tmux new-window -t $LOCAL_SESSION_NAME: -n "$server"
+    tmux send-keys -t $LOCAL_SESSION_NAME:$i "ssh -t $server '$remote_cmd'" C-m
 done
 
 # Attach to the local tmux session
