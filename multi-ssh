@@ -13,6 +13,8 @@ REMOTE_USER="creatica"
 
 # Default options
 SYNCHRONIZE_PANES=false
+SEND_KEYS_COMMAND=""
+USE_SERVER_COMMAND=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -21,9 +23,19 @@ while [[ $# -gt 0 ]]; do
             SYNCHRONIZE_PANES=true
             shift
             ;;
+        --send-keys)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                SEND_KEYS_COMMAND="$2"
+                shift 2
+            else
+                # No argument provided, use commands from servers.conf
+                USE_SERVER_COMMAND=true
+                shift
+            fi
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Available options: --syncronize-panes"
+            echo "Available options: --syncronize-panes, --send-keys ['command']"
             exit 1
             ;;
     esac
@@ -49,10 +61,17 @@ fi
 
 # Load servers from servers.conf
 servers=()
+server_commands=()
 while IFS= read -r line; do
     # Skip empty lines and comments (lines starting with #)
     if [ -n "$line" ] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
-        servers+=("$line")
+        # Split the line by the first space character
+        server=$(echo "$line" | cut -d' ' -f1)
+        # Get the rest of the line as the command (if any)
+        command=$(echo "$line" | cut -s -d' ' -f2-)
+        
+        servers+=("$server")
+        server_commands+=("$command")
     fi
 done < servers.conf
 
@@ -71,6 +90,7 @@ remote_cmd="if tmux has-session -t $REMOTE_SESSION_NAME 2>/dev/null; then tmux a
 # Process all servers
 for i in $(seq 0 $((${#servers[@]}-1))); do
     server=${servers[$i]}
+    server_command=${server_commands[$i]}
     
     if [ $i -eq 0 ]; then
         # For the first server, rename the initial window
@@ -107,6 +127,15 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     
     # Now run the tmux command after potential user switch
     tmux send-keys -t "$target" "$remote_cmd" C-m
+    
+    # Send additional command if specified
+    if [ "$USE_SERVER_COMMAND" = true ] && [ -n "$server_command" ]; then
+        # Use server-specific command from servers.conf
+        tmux send-keys -t "$target" "$server_command"
+    elif [ -n "$SEND_KEYS_COMMAND" ]; then
+        # Use global command specified with --send-keys
+        tmux send-keys -t "$target" "$SEND_KEYS_COMMAND"
+    fi
 done
 
 # Enable synchronize-panes if the flag was set
