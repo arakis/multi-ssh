@@ -17,6 +17,13 @@ SEND_KEYS_COMMAND=""
 USE_SERVER_COMMAND=false
 EXECUTE_COMMAND=false
 
+# Handle the completion option
+if [[ "$1" == "--completion" ]]; then
+    # Return the path to the completion file
+    echo "$(dirname "$0")/multi-ssh-completion.bash"
+    exit 0
+fi
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -39,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command']"
+            echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command'], --completion"
             exit 1
             ;;
     esac
