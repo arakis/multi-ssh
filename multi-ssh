@@ -4,6 +4,36 @@
 # For each server, it establishes an SSH connection and creates or attaches to a remote tmux session.
 # If the script is run multiple times, it destroys any existing local session and creates a new one.
 
+# Function to display help message
+display_help() {
+    echo "Usage: multi-ssh [OPTIONS]"
+    echo
+    echo "Creates a local tmux session and connects to remote servers listed in servers.conf."
+    echo "For each server, it establishes an SSH connection and creates or attaches to a tmux session."
+    echo
+    echo "Options:"
+    echo "  --help                     Display this help message and exit"
+    echo "  --completion               Return the path to the completion file"
+    echo "  --syncronize-panes         Create a single window with multiple synchronized panes (one per server)"
+    echo "  --send-keys [command]      Send keys to each remote session without executing"
+    echo "  --exec [command]           Execute the specified command on each remote session"
+    echo "  --kill                     Kill remote tmux sessions and exit"
+    echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
+    echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
+    echo "  --remote-user <username>   Switch to this user after connecting (default: creatica)"
+    echo "  --ssh-user <username>      SSH login username"
+    echo "  --ssh-key <keyfile>        Path to private key file for SSH"
+    echo
+    echo "If no command is specified with --send-keys or --exec, commands from servers.conf will be used."
+    echo
+    echo "Examples:"
+    echo "  multi-ssh                                   # Connect to all servers"
+    echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
+    echo "  multi-ssh --exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
+    echo "  multi-ssh --kill                            # Kill all remote tmux sessions"
+    exit 0
+}
+
 # Default session names
 LOCAL_SESSION_NAME="multi-ssh"
 REMOTE_SESSION_NAME="remote-session"
@@ -29,9 +59,17 @@ if [[ "$1" == "--completion" ]]; then
     exit 0
 fi
 
+# Display help if requested
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    display_help
+fi
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --help|-h)
+            display_help
+            ;;
         --syncronize-panes)
             SYNCHRONIZE_PANES=true
             shift
@@ -100,9 +138,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command'], --completion, --kill"
-            echo "                   --local-session <name>, --remote-session <name>, --remote-user <username>"
-            echo "                   --ssh-user <username>, --ssh-key <keyfile>"
+            echo "Use --help to display available options"
             exit 1
             ;;
     esac

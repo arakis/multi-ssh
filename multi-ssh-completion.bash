@@ -5,7 +5,7 @@ _multi_ssh_completion() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="--syncronize-panes --send-keys --exec --local-session --remote-session --remote-user --ssh-user --ssh-key --completion"
+    opts="--syncronize-panes --send-keys --exec --local-session --remote-session --remote-user --ssh-user --ssh-key --completion --help"
 
     # Handle all cases
     case "$prev" in
