@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script creates a local tmux session and connects to remote servers from servers.txt.
+# This script creates a local tmux session and connects to remote servers from servers.conf.
 # For each server, it establishes an SSH connection and creates or attaches to a remote tmux session.
 # If the script is run multiple times, it destroys any existing local session and creates a new one.
 
@@ -41,24 +41,24 @@ if tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
     tmux kill-session -t $LOCAL_SESSION_NAME
 fi
 
-# Check if servers.txt exists
-if [ ! -f servers.txt ]; then
-    echo "Error: servers.txt not found."
+# Check if servers.conf exists
+if [ ! -f servers.conf ]; then
+    echo "Error: servers.conf not found."
     exit 1
 fi
 
-# Load servers from servers.txt
+# Load servers from servers.conf
 servers=()
 while IFS= read -r line; do
-    # Skip empty lines
-    if [ -n "$line" ]; then
+    # Skip empty lines and comments (lines starting with #)
+    if [ -n "$line" ] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
         servers+=("$line")
     fi
-done < servers.txt
+done < servers.conf
 
-# Ensure servers.txt has at least one server
+# Ensure servers.conf has at least one server
 if [ ${#servers[@]} -eq 0 ]; then
-    echo "No servers found in servers.txt"
+    echo "No servers found in servers.conf"
     exit 1
 fi
 

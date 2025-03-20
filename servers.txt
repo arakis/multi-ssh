@@ -1,2 +1,0 @@
-global-alex-compute-node-00.srv.creatica.de
-global-alex-compute-node-01.srv.creatica.de
