@@ -20,7 +20,7 @@ display_help() {
     echo "  --kill                     Kill remote tmux sessions and exit"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
-    echo "  --remote-user <username>   Switch to this user after connecting (default: creatica)"
+    echo "  --remote-user <username>   Switch to this user after connecting
     echo "  --ssh-user <username>      SSH login username"
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
     echo
@@ -39,7 +39,7 @@ LOCAL_SESSION_NAME="multi-ssh"
 REMOTE_SESSION_NAME="remote-session"
 
 # Default remote user to switch to after connecting
-REMOTE_USER="creatica"
+REMOTE_USER=""
 
 # Default SSH connection options
 SSH_USER=""
