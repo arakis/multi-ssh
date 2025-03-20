@@ -4,11 +4,11 @@
 # For each server, it establishes an SSH connection and creates or attaches to a remote tmux session.
 # If the script is run multiple times, it destroys any existing local session and creates a new one.
 
-# Session names
+# Default session names
 LOCAL_SESSION_NAME="multi-ssh"
 REMOTE_SESSION_NAME="remote-session"
 
-# Remote user to switch to after connecting
+# Default remote user to switch to after connecting
 REMOTE_USER="creatica"
 
 # Default options
@@ -44,9 +44,37 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --local-session)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                LOCAL_SESSION_NAME="$2"
+                shift 2
+            else
+                echo "Error: --local-session requires a name argument"
+                exit 1
+            fi
+            ;;
+        --remote-session)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                REMOTE_SESSION_NAME="$2"
+                shift 2
+            else
+                echo "Error: --remote-session requires a name argument"
+                exit 1
+            fi
+            ;;
+        --remote-user)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                REMOTE_USER="$2"
+                shift 2
+            else
+                echo "Error: --remote-user requires a username argument"
+                exit 1
+            fi
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command'], --completion"
+            echo "                   --local-session <name>, --remote-session <name>, --remote-user <username>"
             exit 1
             ;;
     esac
