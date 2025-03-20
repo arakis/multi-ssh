@@ -11,6 +11,10 @@ REMOTE_SESSION_NAME="remote-session"
 # Default remote user to switch to after connecting
 REMOTE_USER="creatica"
 
+# Default SSH connection options
+SSH_USER=""
+SSH_KEY=""
+
 # Default options
 SYNCHRONIZE_PANES=false
 SEND_KEYS_COMMAND=""
@@ -71,10 +75,29 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --ssh-user)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                SSH_USER="$2"
+                shift 2
+            else
+                echo "Error: --ssh-user requires a username argument"
+                exit 1
+            fi
+            ;;
+        --ssh-key)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                SSH_KEY="$2"
+                shift 2
+            else
+                echo "Error: --ssh-key requires a path to key file"
+                exit 1
+            fi
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Available options: --syncronize-panes, --send-keys ['command'], --exec ['command'], --completion"
             echo "                   --local-session <name>, --remote-session <name>, --remote-user <username>"
+            echo "                   --ssh-user <username>, --ssh-key <keyfile>"
             exit 1
             ;;
     esac
@@ -162,8 +185,19 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
         target="$LOCAL_SESSION_NAME:$i"
     fi
     
+    # Build SSH command with optional parameters
+    ssh_cmd="ssh -t"
+    if [ -n "$SSH_KEY" ]; then
+        ssh_cmd="$ssh_cmd -i $SSH_KEY"
+    fi
+    if [ -n "$SSH_USER" ]; then
+        ssh_cmd="$ssh_cmd $SSH_USER@$server"
+    else
+        ssh_cmd="$ssh_cmd $server"
+    fi
+    
     # Send SSH command to the target
-    tmux send-keys -t "$target" "ssh -t $server" C-m
+    tmux send-keys -t "$target" "$ssh_cmd" C-m
 
     # if remote user is set, send sudo su $REMOTE_USER before running tmux
     if [ -n "$REMOTE_USER" ]; then
