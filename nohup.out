@@ -1,0 +1,29 @@
+[90m[main 2025-03-20T18:37:39.861Z][0m updateURL https://api2.cursor.sh/updates/api/update/linux-x64/cursor/0.45.14/44eab18a9f82066f776b173cb7ed995b77b02c539a78814b8a52a18739e4f533
+[90m[main 2025-03-20T18:37:39.861Z][0m update#setState idle
+[91m[main 2025-03-20T18:37:41.073Z][0m vscode-file: Refused to load resource /tmp/.mount_cursorZJbcdK/resources/app/extensions/theme-seti/icons/seti.woff from vscode-file: protocol (original URL: vscode-file://vscode-app/tmp/.mount_cursorZJbcdK/resources/app/extensions/theme-seti/icons/seti.woff)
+[90m[main 2025-03-20T18:38:22.714Z][0m updateURL https://api2.cursor.sh/updates/api/update/linux-x64/cursor/0.45.14/44eab18a9f82066f776b173cb7ed995b77b02c539a78814b8a52a18739e4f533
+[90m[main 2025-03-20T18:38:22.714Z][0m update#setState idle
+[91m[main 2025-03-20T18:38:23.910Z][0m vscode-file: Refused to load resource /tmp/.mount_cursorLxpX1L/resources/app/extensions/theme-seti/icons/seti.woff from vscode-file: protocol (original URL: vscode-file://vscode-app/tmp/.mount_cursorLxpX1L/resources/app/extensions/theme-seti/icons/seti.woff)
+[91m[main 2025-03-20T18:38:24.938Z][0m [network] #1: https://api2.cursor.sh/updates/api/update/linux-x64/cursor/0.45.14/44eab18a9f82066f776b173cb7ed995b77b02c539a78814b8a52a18739e4f533 - error undefined net::ERR_NETWORK_CHANGED
+[91m[main 2025-03-20T18:38:24.939Z][0m update#isLatestVersion(): failed to check for updates
+[91m[main 2025-03-20T18:38:24.939Z][0m Error: net::ERR_NETWORK_CHANGED
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:117531)
+    at SimpleURLLoaderWrapper.emit (node:events:518:28)
+[3074125:0320/193825.174401:ERROR:network_service_instance_impl.cc(608)] Network service crashed, restarting service.
+[3074125:0320/193825.180938:ERROR:zygote_communication_linux.cc(297)] Failed to send GetTerminationStatus message to zygote
+[3074125:0320/193825.182831:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.183093:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.183378:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.183640:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[90m[main 2025-03-20T18:38:25.184Z][0m Extension host with pid 3074887 exited with code: 0, signal: unknown.
+[3074125:0320/193825.184694:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.185254:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.185545:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.185704:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.185841:ERROR:gpu_process_host.cc(1001)] GPU process launch failed: error_code=1002
+[3074125:0320/193825.185846:FATAL:gpu_data_manager_impl_private.cc(436)] GPU process isn't usable. Goodbye.
+[0320/193825.193370:ERROR:elf_dynamic_array_reader.h(64)] tag not found
+[0320/193825.194930:ERROR:scoped_ptrace_attach.cc(27)] ptrace: No such process (3)
+[90m[main 2025-03-20T18:38:50.274Z][0m updateURL https://api2.cursor.sh/updates/api/update/linux-x64/cursor/0.45.14/44eab18a9f82066f776b173cb7ed995b77b02c539a78814b8a52a18739e4f533
+[90m[main 2025-03-20T18:38:50.275Z][0m update#setState idle
+[91m[main 2025-03-20T18:38:52.062Z][0m vscode-file: Refused to load resource /tmp/.mount_cursor37REKW/resources/app/extensions/theme-seti/icons/seti.woff from vscode-file: protocol (original URL: vscode-file://vscode-app/tmp/.mount_cursor37REKW/resources/app/extensions/theme-seti/icons/seti.woff)
