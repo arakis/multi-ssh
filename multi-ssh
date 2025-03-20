@@ -45,6 +45,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate flag combinations
+if [ "$SYNCHRONIZE_PANES" = true ] && ([ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]); then
+    echo "Error: --syncronize-panes cannot be used together with --send-keys or --exec"
+    echo "Please use either --syncronize-panes or --send-keys/--exec, but not both"
+    exit 1
+fi
+
 # Check if tmux is installed
 if ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
