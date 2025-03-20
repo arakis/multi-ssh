@@ -9,7 +9,12 @@ _multi_ssh_completion() {
 
     # Handle all cases
     case "$prev" in
-        --local-session|--remote-session|--remote-user|--ssh-user|--ssh-key)
+        --ssh-key)
+            # Provide file completion for SSH key files
+            COMPREPLY=( $(compgen -f -- ${cur}) )
+            return 0
+            ;;
+        --local-session|--remote-session|--remote-user|--ssh-user)
             # These options expect an argument, don't complete anything
             return 0
             ;;
