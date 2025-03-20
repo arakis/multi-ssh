@@ -115,6 +115,13 @@ if [ "$SYNCHRONIZE_PANES" = true ] && ([ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SE
     exit 1
 fi
 
+# Check that kill mode is not used with synchronized panes
+if [ "$SYNCHRONIZE_PANES" = true ] && [ "$KILL_MODE" = true ]; then
+    echo "Error: --syncronize-panes cannot be used together with --kill"
+    echo "Please use either --syncronize-panes or --kill, but not both"
+    exit 1
+fi
+
 # Check if tmux is installed
 if ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
@@ -213,12 +220,6 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     if [ "$KILL_MODE" = true ]; then
         # Kill the remote tmux session
         tmux send-keys -t "$target" "tmux kill-session -t $REMOTE_SESSION_NAME 2>/dev/null || echo 'No remote session to kill'" C-m
-        # Exit from the remote shell (and SSH connection)
-        tmux send-keys -t "$target" "exit" C-m
-        # If we're in sudo, we need another exit
-        if [ -n "$REMOTE_USER" ]; then
-            tmux send-keys -t "$target" "exit" C-m
-        fi
     else
         # Normal mode - run the tmux command after potential user switch
         tmux send-keys -t "$target" "$remote_cmd" C-m
