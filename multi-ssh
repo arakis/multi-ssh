@@ -257,6 +257,9 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
         target="$LOCAL_SESSION_NAME:$i"
     fi
     
+    # Disable shell history in the local pane
+    tmux send-keys -t "$target" "set +o history" C-m
+
     # Build SSH command with optional parameters
     ssh_cmd="ssh -t"
     if [ -n "$SSH_KEY" ]; then
