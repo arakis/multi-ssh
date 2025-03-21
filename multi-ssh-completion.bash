@@ -5,11 +5,11 @@ _multi_ssh_completion() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="--syncronize-panes --send-keys --exec --local-session --remote-session --remote-user --ssh-user --ssh-key --completion --help"
+    opts="--syncronize-panes --send-keys --exec --local-session --remote-session --remote-user --ssh-user --ssh-key --completion --help --upload --download"
 
     # Handle all cases
     case "$prev" in
-        --ssh-key)
+        --ssh-key|--upload|--download)
             # Provide file completion for SSH key files
             COMPREPLY=( $(compgen -f -- ${cur}) )
             return 0
