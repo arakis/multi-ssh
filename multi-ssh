@@ -276,6 +276,14 @@ if [ "$COPY_MODE" = true ]; then
             local_path="$DEST_PATH"
             operation="downloading"
             
+            # If remote user is specified, replace ~ with /home/username in remote path
+            if [ -n "$REMOTE_USER" ]; then
+                # Replace any occurrence of ~/ with the remote user's home directory
+                remote_path="${remote_path//\~\//\/home\/$REMOTE_USER\/}"
+                # Also handle standalone ~ (without trailing slash)
+                remote_path="${remote_path//\~/\/home\/$REMOTE_USER}"
+            fi
+            
             # Construct the SSH command parts
             ssh_opts=""
             if [ -n "$SSH_KEY" ]; then
@@ -310,6 +318,14 @@ if [ "$COPY_MODE" = true ]; then
             local_path="$SRC_PATH"
             remote_path="${DEST_PATH#remote:}"
             operation="uploading"
+            
+            # If remote user is specified, replace ~ with /home/username in remote path
+            if [ -n "$REMOTE_USER" ]; then
+                # Replace any occurrence of ~/ with the remote user's home directory
+                remote_path="${remote_path//\~\//\/home\/$REMOTE_USER\/}"
+                # Also handle standalone ~ (without trailing slash)
+                remote_path="${remote_path//\~/\/home\/$REMOTE_USER}"
+            fi
             
             # Construct the SSH command parts
             ssh_opts=""
