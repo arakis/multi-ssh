@@ -20,7 +20,28 @@ _multi_ssh_completion() {
     # Handle all cases
     if [[ $copy_mode -eq 1 && $COMP_CWORD -gt $((i+1)) ]]; then
         # We're completing the second part (destination) of a copy operation
-        COMPREPLY=( $(compgen -f -- ${cur}) )
+        if [[ ${cur} == *:* ]]; then
+            # Split at the colon
+            local remote_part="${cur%%:*}"
+            local local_part="${cur#*:}"
+            
+            # Complete the local part but preserve the remote part
+            local completions=($(compgen -f -- "${local_part}"))
+            COMPREPLY=()
+            for comp in "${completions[@]}"; do
+                COMPREPLY+=("${remote_part}:${comp}")
+            done
+        else
+            # Add "remote:" as a completion option along with standard file completion
+            local completions=($(compgen -f -- "${cur}"))
+            
+            # Only add remote: as an option if it matches the current prefix
+            if [[ "remote:" =~ ^"${cur}" ]]; then
+                completions+=("remote:")
+            fi
+            
+            COMPREPLY=("${completions[@]}")
+        fi
         return 0
     fi
 
@@ -44,8 +65,15 @@ _multi_ssh_completion() {
                     COMPREPLY+=("${remote_part}:${comp}")
                 done
             else
-                # Standard file completion
-                COMPREPLY=( $(compgen -f -- ${cur}) )
+                # Add "remote:" as a completion option along with standard file completion
+                local completions=($(compgen -f -- "${cur}"))
+                
+                # Only add remote: as an option if it matches the current prefix
+                if [[ "remote:" =~ ^"${cur}" ]]; then
+                    completions+=("remote:")
+                fi
+                
+                COMPREPLY=("${completions[@]}")
             fi
             return 0
             ;;
@@ -62,8 +90,29 @@ _multi_ssh_completion() {
             
             # If we just completed a remote:path and are at a new argument position
             if [[ $copy_mode -eq 1 && $COMP_CWORD -eq $((i+2)) ]]; then
-                # Provide file completion for the destination
-                COMPREPLY=( $(compgen -f -- ${cur}) )
+                # Provide file completion and remote: for the destination
+                if [[ ${cur} == *:* ]]; then
+                    # Split at the colon
+                    local remote_part="${cur%%:*}"
+                    local local_part="${cur#*:}"
+                    
+                    # Complete the local part but preserve the remote part
+                    local completions=($(compgen -f -- "${local_part}"))
+                    COMPREPLY=()
+                    for comp in "${completions[@]}"; do
+                        COMPREPLY+=("${remote_part}:${comp}")
+                    done
+                else
+                    # Add "remote:" as a completion option along with standard file completion
+                    local completions=($(compgen -f -- "${cur}"))
+                    
+                    # Only add remote: as an option if it matches the current prefix
+                    if [[ "remote:" =~ ^"${cur}" ]]; then
+                        completions+=("remote:")
+                    fi
+                    
+                    COMPREPLY=("${completions[@]}")
+                fi
                 return 0
             fi
             ;;
