@@ -285,7 +285,7 @@ if [ "$COPY_MODE" = true ]; then
             fi
             
             # Construct the SSH command parts
-            ssh_opts=""
+            ssh_opts="-o StrictHostKeyChecking=no"
             if [ -n "$SSH_KEY" ]; then
                 ssh_opts="$ssh_opts -i $SSH_KEY"
             fi
@@ -328,7 +328,7 @@ if [ "$COPY_MODE" = true ]; then
             fi
             
             # Construct the SSH command parts
-            ssh_opts=""
+            ssh_opts="-o StrictHostKeyChecking=no"
             if [ -n "$SSH_KEY" ]; then
                 ssh_opts="$ssh_opts -i $SSH_KEY"
             fi
@@ -413,7 +413,7 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     tmux send-keys -t "$target" "set +o history" C-m
 
     # Build SSH command with optional parameters
-    ssh_cmd="ssh -t"
+    ssh_cmd="ssh -t -o StrictHostKeyChecking=no"
     if [ -n "$SSH_KEY" ]; then
         ssh_cmd="$ssh_cmd -i $SSH_KEY"
     fi
