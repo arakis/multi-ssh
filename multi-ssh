@@ -18,6 +18,7 @@ display_help() {
     echo "  --send-keys [command]      Send keys to each remote session without executing"
     echo "  --exec [command]           Execute the specified command on each remote session"
     echo "  --kill                     Kill remote tmux sessions and exit"
+    echo "  --copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
     echo "  --remote-user <username>   Switch to this user after connecting"
@@ -43,6 +44,8 @@ display_help() {
     echo "  multi-ssh --exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
     echo "  multi-ssh --kill                            # Kill all remote tmux sessions"
     echo "  multi-ssh --config ~/my-servers.conf        # Use a custom servers configuration file"
+    echo "  multi-ssh --copy ~/file.txt remote:~/file.txt  # Upload file to all servers"
+    echo "  multi-ssh --copy remote:/var/log/app.log ./logs/  # Download file from all servers"
     exit 0
 }
 
@@ -66,6 +69,9 @@ SEND_KEYS_COMMAND=""
 USE_SERVER_COMMAND=false
 EXECUTE_COMMAND=false
 KILL_MODE=false  # New option for killing remote sessions
+COPY_MODE=false  # New option for file copying
+SRC_PATH=""
+DEST_PATH=""
 
 # Handle the completion option
 if [[ "$1" == "--completion" ]]; then
@@ -92,6 +98,18 @@ while [[ $# -gt 0 ]]; do
         --kill)
             KILL_MODE=true
             shift
+            ;;
+        --copy)
+            COPY_MODE=true
+            if [[ -n "$2" && -n "$3" && ! "$2" =~ ^--* && ! "$3" =~ ^--* ]]; then
+                SRC_PATH="$2"
+                DEST_PATH="$3"
+                shift 3
+            else
+                echo "Error: --copy requires both source and destination path arguments"
+                echo "Usage: --copy [remote:|]:source_path [remote:|]:destination_path"
+                exit 1
+            fi
             ;;
         --send-keys|--exec)
             if [[ "$1" == "--exec" ]]; then
@@ -182,14 +200,37 @@ if [ "$SYNCHRONIZE_PANES" = true ] && [ "$KILL_MODE" = true ]; then
     exit 1
 fi
 
-# Check if tmux is installed
-if ! command -v tmux &> /dev/null; then
+# Validate copy mode arguments
+if [ "$COPY_MODE" = true ]; then
+    # Check if at least one path has the remote: prefix
+    if [[ ! "$SRC_PATH" =~ ^remote: && ! "$DEST_PATH" =~ ^remote: ]]; then
+        echo "Error: At least one path must have the 'remote:' prefix in copy mode"
+        echo "Usage: --copy [remote:|]:source_path [remote:|]:destination_path"
+        exit 1
+    fi
+    
+    # Check for incompatible flags
+    if [ "$SYNCHRONIZE_PANES" = true ] || [ "$KILL_MODE" = true ] || [ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]; then
+        echo "Error: --copy cannot be used with other operational flags"
+        echo "Please use only --copy with its arguments"
+        exit 1
+    fi
+    
+    # Ensure rsync is installed
+    if ! command -v rsync &> /dev/null; then
+        echo "Error: rsync is not installed. Please install rsync and try again."
+        exit 1
+    fi
+fi
+
+# Check if tmux is installed (skip if only using copy mode)
+if [ "$COPY_MODE" = false ] && ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
     exit 1
 fi
 
-# Check if the local tmux session already exists
-if tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
+# Check if the local tmux session already exists (skip if only using copy mode)
+if [ "$COPY_MODE" = false ] && tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
     # Kill existing session
     tmux kill-session -t $LOCAL_SESSION_NAME
 fi
@@ -220,6 +261,101 @@ done < "$CONFIG_FILE"
 if [ ${#servers[@]} -eq 0 ]; then
     echo "No servers found in '$CONFIG_FILE'"
     exit 1
+fi
+
+# If in copy mode, perform the rsync operations and exit
+if [ "$COPY_MODE" = true ]; then
+    # Process each server
+    for i in $(seq 0 $((${#servers[@]}-1))); do
+        server=${servers[$i]}
+        
+        # Determine if we're uploading or downloading
+        if [[ "$SRC_PATH" =~ ^remote: ]]; then
+            # Downloading: remote to local
+            remote_path="${SRC_PATH#remote:}"
+            local_path="$DEST_PATH"
+            operation="downloading"
+            
+            # Construct the SSH command parts
+            ssh_opts=""
+            if [ -n "$SSH_KEY" ]; then
+                ssh_opts="$ssh_opts -i $SSH_KEY"
+            fi
+            
+            # Construct server address with optional SSH user
+            server_addr="$server"
+            if [ -n "$SSH_USER" ]; then
+                server_addr="$SSH_USER@$server"
+            fi
+            
+            # Construct rsync command with appropriate options
+            rsync_cmd="rsync -avz"
+            
+            # Add SSH options
+            rsync_cmd="$rsync_cmd -e \"ssh $ssh_opts\""
+            
+            # Add remote user sudo if specified
+            if [ -n "$REMOTE_USER" ]; then
+                rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
+            fi
+            
+            # Complete the command with source and destination
+            rsync_cmd="$rsync_cmd $server_addr:\"$remote_path\" \"$local_path\""
+            
+            # Echo operation info
+            echo "Downloading file(s) from $server:$remote_path to $local_path"
+            
+        else
+            # Uploading: local to remote
+            local_path="$SRC_PATH"
+            remote_path="${DEST_PATH#remote:}"
+            operation="uploading"
+            
+            # Construct the SSH command parts
+            ssh_opts=""
+            if [ -n "$SSH_KEY" ]; then
+                ssh_opts="$ssh_opts -i $SSH_KEY"
+            fi
+            
+            # Construct server address with optional SSH user
+            server_addr="$server"
+            if [ -n "$SSH_USER" ]; then
+                server_addr="$SSH_USER@$server"
+            fi
+            
+            # Construct rsync command with appropriate options
+            rsync_cmd="rsync -avz"
+            
+            # Add SSH options
+            rsync_cmd="$rsync_cmd -e \"ssh $ssh_opts\""
+            
+            # Add remote user sudo if specified
+            if [ -n "$REMOTE_USER" ]; then
+                rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
+            fi
+            
+            # Complete the command with source and destination
+            rsync_cmd="$rsync_cmd \"$local_path\" $server_addr:\"$remote_path\""
+            
+            # Echo operation info
+            echo "Uploading file(s) from $local_path to $server:$remote_path"
+        fi
+        
+        # Execute the rsync command
+        eval $rsync_cmd
+        
+        # Check for success
+        if [ $? -eq 0 ]; then
+            echo "Successfully ${operation} file(s) for server $server"
+        else
+            echo "Error ${operation} file(s) for server $server"
+        fi
+        
+        echo "------------------------"
+    done
+    
+    # Exit after completing all copy operations
+    exit 0
 fi
 
 # Create a new local tmux session
