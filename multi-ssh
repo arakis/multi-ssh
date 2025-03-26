@@ -404,7 +404,7 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     fi
     
     # Disable shell history in the local pane
-    tmux send-keys -t "$target" "set +o history" C-m
+    tmux send-keys -t "$target" "unset HISTFILE" C-m
 
     # Build SSH command with optional parameters
     ssh_cmd="ssh -t -o StrictHostKeyChecking=no"
