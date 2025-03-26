@@ -12,15 +12,21 @@ display_help() {
     echo "For each server, it establishes an SSH connection and creates or attaches to a tmux session."
     echo
     echo "Options:"
-    echo "  --help                     Display this help message and exit"
-    echo "  completion               Return the path to the completion file"
-    echo "  --syncronize-panes         Create a single window with multiple synchronized panes (one per server)"
-    echo "  send-keys [command]      Send keys to each remote session without executing"
-    echo "  exec [command]           Execute the specified command on each remote session"
-    echo "  kill                     Kill remote tmux sessions and exit"
+    echo "  --help                     Displays this help message and exits"
+    echo "  completion                 Returns the completion source file"
+    echo
+    echo "  Main Commands:"
+    echo "  send-keys [command]        Sends keys to each remote session without executing"
+    echo "  exec [command]             Executes the specified command on each remote session" 
+    echo "  kill                       Kill remote tmux sessions and exit"
     echo "  copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
+    echo
+    echo "  Session Options:"
+    echo "  --syncronize-panes         Create a single window with multiple synchronized panes (one per server)"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
+    echo
+    echo "  Connection Options:"
     echo "  --remote-user <username>   Switch to this user after connecting"
     echo "  --ssh-user <username>      SSH login username"
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
@@ -40,12 +46,12 @@ display_help() {
     echo
     echo "Examples:"
     echo "  multi-ssh                                   # Connect to all servers"
-    echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
-    echo "  multi-ssh --exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
-    echo "  multi-ssh --kill                            # Kill all remote tmux sessions"
     echo "  multi-ssh --config ~/my-servers.conf        # Use a custom servers configuration file"
-    echo "  multi-ssh --copy ~/file.txt remote:~/file.txt  # Upload file to all servers"
-    echo "  multi-ssh --copy remote:/var/log/app.log ./logs/  # Download file from all servers"
+    echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
+    echo "  multi-ssh exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
+    echo "  multi-ssh kill                            # Kill all remote tmux sessions"
+    echo "  multi-ssh copy ~/file.txt remote:~/file.txt  # Upload file to all servers"
+    echo "  multi-ssh copy remote:/var/log/app.log ./logs/  # Download file from all servers"
     exit 0
 }
 

@@ -5,7 +5,10 @@ _multi_ssh_completion() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="--syncronize-panes send-keys exec --local-session --remote-session --remote-user --ssh-user --ssh-key completion --help copy kill --config"
+    
+    # Group options in a more meaningful order
+    # Help and info options, main commands, session options, connection options
+    opts="--help completion send-keys exec kill copy --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config"
 
     # Check if we're completing a copy operation anywhere in the command
     local i
