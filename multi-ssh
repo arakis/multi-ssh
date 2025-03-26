@@ -13,12 +13,12 @@ display_help() {
     echo
     echo "Options:"
     echo "  --help                     Display this help message and exit"
-    echo "  --completion               Return the path to the completion file"
+    echo "  completion               Return the path to the completion file"
     echo "  --syncronize-panes         Create a single window with multiple synchronized panes (one per server)"
-    echo "  --send-keys [command]      Send keys to each remote session without executing"
-    echo "  --exec [command]           Execute the specified command on each remote session"
-    echo "  --kill                     Kill remote tmux sessions and exit"
-    echo "  --copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
+    echo "  send-keys [command]      Send keys to each remote session without executing"
+    echo "  exec [command]           Execute the specified command on each remote session"
+    echo "  kill                     Kill remote tmux sessions and exit"
+    echo "  copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
     echo "  --remote-user <username>   Switch to this user after connecting"
@@ -26,7 +26,7 @@ display_help() {
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
     echo "  --config <path>            Path to servers configuration file (default: ./servers.conf)"
     echo
-    echo "If no command is specified with --send-keys or --exec, commands from servers.conf will be used."
+    echo "If no command is specified with send-keys or exec, commands from servers.conf will be used."
     echo
     echo "Configuration file format (servers.conf):"
     echo "  Each line should contain a server address/hostname, optionally followed by a command."
@@ -74,7 +74,7 @@ SRC_PATH=""
 DEST_PATH=""
 
 # Handle the completion option
-if [[ "$1" == "--completion" ]]; then
+if [[ "$1" == "completion" ]]; then
     # Return the path to the completion file
     echo "$(dirname "$0")/multi-ssh-completion.bash"
     exit 0
@@ -95,24 +95,24 @@ while [[ $# -gt 0 ]]; do
             SYNCHRONIZE_PANES=true
             shift
             ;;
-        --kill)
+        kill)
             KILL_MODE=true
             shift
             ;;
-        --copy)
+        copy)
             COPY_MODE=true
             if [[ -n "$2" && -n "$3" && ! "$2" =~ ^--* && ! "$3" =~ ^--* ]]; then
                 SRC_PATH="$2"
                 DEST_PATH="$3"
                 shift 3
             else
-                echo "Error: --copy requires both source and destination path arguments"
-                echo "Usage: --copy [remote:|]:source_path [remote:|]:destination_path"
+                echo "Error: copy requires both source and destination path arguments"
+                echo "Usage: copy [remote:|]:source_path [remote:|]:destination_path"
                 exit 1
             fi
             ;;
-        --send-keys|--exec)
-            if [[ "$1" == "--exec" ]]; then
+        send-keys|exec)
+            if [[ "$1" == "exec" ]]; then
                 EXECUTE_COMMAND=true
             fi
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
@@ -188,15 +188,15 @@ done
 
 # Validate flag combinations
 if [ "$SYNCHRONIZE_PANES" = true ] && ([ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]); then
-    echo "Error: --syncronize-panes cannot be used together with --send-keys or --exec"
-    echo "Please use either --syncronize-panes or --send-keys/--exec, but not both"
+    echo "Error: --syncronize-panes cannot be used together with send-keys or exec"
+    echo "Please use either --syncronize-panes or send-keys/exec, but not both"
     exit 1
 fi
 
 # Check that kill mode is not used with synchronized panes
 if [ "$SYNCHRONIZE_PANES" = true ] && [ "$KILL_MODE" = true ]; then
-    echo "Error: --syncronize-panes cannot be used together with --kill"
-    echo "Please use either --syncronize-panes or --kill, but not both"
+    echo "Error: --syncronize-panes cannot be used together with kill"
+    echo "Please use either --syncronize-panes or kill, but not both"
     exit 1
 fi
 
@@ -205,14 +205,14 @@ if [ "$COPY_MODE" = true ]; then
     # Check if at least one path has the remote: prefix
     if [[ ! "$SRC_PATH" =~ ^remote: && ! "$DEST_PATH" =~ ^remote: ]]; then
         echo "Error: At least one path must have the 'remote:' prefix in copy mode"
-        echo "Usage: --copy [remote:|]:source_path [remote:|]:destination_path"
+        echo "Usage: copy [remote:|]:source_path [remote:|]:destination_path"
         exit 1
     fi
     
     # Check for incompatible flags
     if [ "$SYNCHRONIZE_PANES" = true ] || [ "$KILL_MODE" = true ] || [ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]; then
-        echo "Error: --copy cannot be used with other operational flags"
-        echo "Please use only --copy with its arguments"
+        echo "Error: copy cannot be used with other operational flags"
+        echo "Please use only copy with its arguments"
         exit 1
     fi
     
@@ -433,7 +433,7 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
             # Use server-specific command from servers.conf
             command_to_send="$server_command"
         elif [ -n "$SEND_KEYS_COMMAND" ]; then
-            # Use global command specified with --send-keys or --exec
+            # Use global command specified with send-keys or exec
             command_to_send="$SEND_KEYS_COMMAND"
         fi
         
