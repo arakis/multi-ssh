@@ -285,7 +285,7 @@ if [ "$COPY_MODE" = true ]; then
             fi
             
             # Construct the SSH command parts
-            ssh_opts="-o StrictHostKeyChecking=no"
+            ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             if [ -n "$SSH_KEY" ]; then
                 ssh_opts="$ssh_opts -i $SSH_KEY"
             fi
@@ -300,7 +300,7 @@ if [ "$COPY_MODE" = true ]; then
             rsync_cmd="rsync -avz"
             
             # Add SSH options
-            rsync_cmd="$rsync_cmd -e \"ssh $ssh_opts\""
+            rsync_cmd="$rsync_cmd -e 'ssh $ssh_opts'"
             
             # Add remote user sudo if specified
             if [ -n "$REMOTE_USER" ]; then
@@ -328,7 +328,7 @@ if [ "$COPY_MODE" = true ]; then
             fi
             
             # Construct the SSH command parts
-            ssh_opts="-o StrictHostKeyChecking=no"
+            ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             if [ -n "$SSH_KEY" ]; then
                 ssh_opts="$ssh_opts -i $SSH_KEY"
             fi
@@ -343,7 +343,7 @@ if [ "$COPY_MODE" = true ]; then
             rsync_cmd="rsync -avz"
             
             # Add SSH options
-            rsync_cmd="$rsync_cmd -e \"ssh $ssh_opts\""
+            rsync_cmd="$rsync_cmd -e 'ssh $ssh_opts'"
             
             # Add remote user sudo if specified
             if [ -n "$REMOTE_USER" ]; then
