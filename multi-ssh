@@ -292,7 +292,7 @@ fi
 # Load servers from the config file
 servers=()
 server_commands=()
-while IFS= read -r line; do
+while IFS= read -r line || [ -n "$line" ]; do
     # Skip empty lines and comments (lines starting with #)
     if [ -n "$line" ] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
         # Split the line by the first space character
