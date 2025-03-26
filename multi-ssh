@@ -223,6 +223,54 @@ if [ "$COPY_MODE" = true ]; then
     fi
 fi
 
+# Helper functions for copy mode
+setup_ssh_options() {
+    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    if [ -n "$SSH_KEY" ]; then
+        ssh_opts="$ssh_opts -i $SSH_KEY"
+    fi
+    echo "$ssh_opts"
+}
+
+get_server_address() {
+    local server="$1"
+    local server_addr="$server"
+    if [ -n "$SSH_USER" ]; then
+        server_addr="$SSH_USER@$server"
+    fi
+    echo "$server_addr"
+}
+
+process_remote_path() {
+    local path="$1"
+    # If remote user is specified, replace ~ with /home/username in remote path
+    if [ -n "$REMOTE_USER" ]; then
+        # Replace any occurrence of ~/ with the remote user's home directory
+        path="${path//\~\//\/home\/$REMOTE_USER\/}"
+        # Also handle standalone ~ (without trailing slash)
+        path="${path//\~/\/home\/$REMOTE_USER}"
+    fi
+    echo "$path"
+}
+
+build_rsync_command() {
+    local src="$1"
+    local dest="$2"
+    local ssh_opts="$3"
+    
+    local rsync_cmd="rsync -avz -e 'ssh $ssh_opts'"
+    
+    # Add remote user sudo if specified
+    if [ -n "$REMOTE_USER" ]; then
+        rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
+    fi
+    
+    # Complete the command with source and destination
+    rsync_cmd="$rsync_cmd \"$src\" \"$dest\""
+    
+    echo "$rsync_cmd"
+}
+
 # Check if tmux is installed (skip if only using copy mode)
 if [ "$COPY_MODE" = false ] && ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
@@ -268,47 +316,18 @@ if [ "$COPY_MODE" = true ]; then
     # Process each server
     for i in $(seq 0 $((${#servers[@]}-1))); do
         server=${servers[$i]}
+        ssh_opts=$(setup_ssh_options)
+        server_addr=$(get_server_address "$server")
         
         # Determine if we're uploading or downloading
         if [[ "$SRC_PATH" =~ ^remote: ]]; then
             # Downloading: remote to local
-            remote_path="${SRC_PATH#remote:}"
+            remote_path=$(process_remote_path "${SRC_PATH#remote:}")
             local_path="$DEST_PATH"
             operation="downloading"
             
-            # If remote user is specified, replace ~ with /home/username in remote path
-            if [ -n "$REMOTE_USER" ]; then
-                # Replace any occurrence of ~/ with the remote user's home directory
-                remote_path="${remote_path//\~\//\/home\/$REMOTE_USER\/}"
-                # Also handle standalone ~ (without trailing slash)
-                remote_path="${remote_path//\~/\/home\/$REMOTE_USER}"
-            fi
-            
-            # Construct the SSH command parts
-            ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            if [ -n "$SSH_KEY" ]; then
-                ssh_opts="$ssh_opts -i $SSH_KEY"
-            fi
-            
-            # Construct server address with optional SSH user
-            server_addr="$server"
-            if [ -n "$SSH_USER" ]; then
-                server_addr="$SSH_USER@$server"
-            fi
-            
-            # Construct rsync command with appropriate options
-            rsync_cmd="rsync -avz"
-            
-            # Add SSH options
-            rsync_cmd="$rsync_cmd -e 'ssh $ssh_opts'"
-            
-            # Add remote user sudo if specified
-            if [ -n "$REMOTE_USER" ]; then
-                rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
-            fi
-            
-            # Complete the command with source and destination
-            rsync_cmd="$rsync_cmd $server_addr:\"$remote_path\" \"$local_path\""
+            # Construct rsync command
+            rsync_cmd=$(build_rsync_command "$server_addr:\"$remote_path\"" "$local_path" "$ssh_opts")
             
             # Echo operation info
             echo "Downloading file(s) from $server:$remote_path to $local_path"
@@ -316,42 +335,11 @@ if [ "$COPY_MODE" = true ]; then
         else
             # Uploading: local to remote
             local_path="$SRC_PATH"
-            remote_path="${DEST_PATH#remote:}"
+            remote_path=$(process_remote_path "${DEST_PATH#remote:}")
             operation="uploading"
             
-            # If remote user is specified, replace ~ with /home/username in remote path
-            if [ -n "$REMOTE_USER" ]; then
-                # Replace any occurrence of ~/ with the remote user's home directory
-                remote_path="${remote_path//\~\//\/home\/$REMOTE_USER\/}"
-                # Also handle standalone ~ (without trailing slash)
-                remote_path="${remote_path//\~/\/home\/$REMOTE_USER}"
-            fi
-            
-            # Construct the SSH command parts
-            ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-            if [ -n "$SSH_KEY" ]; then
-                ssh_opts="$ssh_opts -i $SSH_KEY"
-            fi
-            
-            # Construct server address with optional SSH user
-            server_addr="$server"
-            if [ -n "$SSH_USER" ]; then
-                server_addr="$SSH_USER@$server"
-            fi
-            
-            # Construct rsync command with appropriate options
-            rsync_cmd="rsync -avz"
-            
-            # Add SSH options
-            rsync_cmd="$rsync_cmd -e 'ssh $ssh_opts'"
-            
-            # Add remote user sudo if specified
-            if [ -n "$REMOTE_USER" ]; then
-                rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
-            fi
-            
-            # Complete the command with source and destination
-            rsync_cmd="$rsync_cmd \"$local_path\" $server_addr:\"$remote_path\""
+            # Construct rsync command
+            rsync_cmd=$(build_rsync_command "$local_path" "$server_addr:\"$remote_path\"" "$ssh_opts")
             
             # Echo operation info
             echo "Uploading file(s) from $local_path to $server:$remote_path"
