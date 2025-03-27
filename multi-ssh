@@ -21,6 +21,7 @@ display_help() {
     echo "  exec [command]             Executes the specified command on each remote session"
     echo "  kill                       Kill remote tmux sessions and exit"
     echo "  copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
+    echo "  toggle-layout              (Internal) Toggles between pane and window layout in an active session"
     echo
     echo "  Layout & Session Options:"
     echo "  --layout <pane|window>     Specify layout: 'pane' (default, one window, multiple panes) or 'window' (one window per server)"
@@ -38,6 +39,7 @@ display_help() {
     echo "  --initial-workdir <path>   Change to this directory on remote hosts before starting tmux"
     echo
     echo "In pane layout mode, use 'Prefix + S' (e.g., Ctrl+B then Shift+S) to toggle pane synchronization on/off."
+    echo "Use 'Prefix + L' to attempt toggling between pane and window layouts (experimental)."
     echo
     echo "If no command is specified with send-keys or exec, commands from the config file's [servers] section will be used."
     echo
@@ -99,6 +101,7 @@ USE_SERVER_COMMAND=false
 EXECUTE_COMMAND=false
 KILL_MODE=false  # New option for killing remote sessions
 COPY_MODE=false  # New option for file copying
+TOGGLE_LAYOUT_MODE=false # New variable for layout toggling
 SRC_PATH=""
 DEST_PATH=""
 FILTER_SERVERS_LIST="" # New variable for --servers option
@@ -239,6 +242,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         kill)
             KILL_MODE=true
+            shift
+            ;;
+        toggle-layout) # New case
+            TOGGLE_LAYOUT_MODE=true
             shift
             ;;
         copy)
@@ -506,6 +513,78 @@ build_rsync_command() {
     echo "$rsync_cmd"
 }
 
+# Function to toggle layout between pane and window mode
+toggle_layout() {
+    local session_name="$1"
+    if ! tmux has-session -t "$session_name" 2>/dev/null; then
+        echo "Error: Session '$session_name' not found." >&2
+        exit 1
+    fi
+
+    local num_windows=$(tmux list-windows -t "$session_name" -F '#I' | wc -l)
+    local num_panes_win0=$(tmux list-panes -t "$session_name:0" -F '#P' | wc -l)
+
+    if [[ $num_windows -gt 1 && $num_panes_win0 -eq 1 ]]; then
+        # --- Current layout is WINDOW, switch to PANE ---
+        # Get list of window indices, excluding window 0
+        local window_indices=$(tmux list-windows -t "$session_name" -F '#I' | grep -v '^0$')
+
+        for w_idx in $window_indices; do
+            local source_pane="$session_name:$w_idx.0" # Assume pane 0 in other windows
+            local target_window="$session_name:0"
+            # Join the pane into window 0. -d keeps the source pane's window from being selected.
+            # The source window should be killed automatically if empty after join.
+            tmux join-pane -s "$source_pane" -t "$target_window" -d
+            if [ $? -ne 0 ]; then
+                 echo "Warning: Failed to join pane from window $w_idx." >&2
+            fi
+        done
+        # Apply tiled layout to window 0
+        tmux select-layout -t "$session_name:0" tiled
+        # Optional: Store state
+        # tmux set-option -g -t "$session_name" @multi_ssh_layout "pane"
+
+        # Explicitly select the first pane in the main window
+        tmux select-window -t "$session_name:0"
+        tmux select-pane -t "$session_name:0.0"
+
+    elif [[ $num_windows -eq 1 && $num_panes_win0 -gt 1 ]]; then
+        # --- Current layout is PANE, switch to WINDOW ---
+        # Get list of pane indices in window 0, excluding pane 0
+        # Iterate in reverse order to avoid index shifting issues
+        local pane_indices=$(tmux list-panes -t "$session_name:0" -F '#P' | sort -nr | grep -v '^0$')
+
+        for p_idx in $pane_indices; do
+            local source_pane="$session_name:0.$p_idx"
+            # Retrieve the server name stored in the pane's options
+            local server_name=$(tmux show-options -t "$source_pane" -qv @multi_ssh_server_name)
+            if [ -z "$server_name" ]; then
+                # Fallback name if option wasn't set or retrieved
+                server_name="server-win-$p_idx"
+                echo "Warning: Could not retrieve server name for pane $p_idx. Using fallback name '$server_name'."
+            fi
+            # Break the pane into a new window named after the server. -d keeps focus.
+            tmux break-pane -s "$source_pane" -n "$server_name" -d
+             if [ $? -ne 0 ]; then
+                 echo "Warning: Failed to break pane $p_idx." >&2
+             fi
+        done
+         # Optional: Store state
+         # tmux set-option -g -t "$session_name" @multi_ssh_layout "window"
+
+        # Explicitly select the first pane in the main window (which remains after breaking)
+        tmux select-window -t "$session_name:0"
+        tmux select-pane -t "$session_name:0.0"
+
+    else
+        echo "Error: Current layout is ambiguous or unsupported for toggling." >&2
+        echo "Expected either multiple windows with 1 pane each, or 1 window with multiple panes." >&2
+        exit 1
+    fi
+
+    exit 0
+}
+
 # New function to handle killing remote sessions directly
 kill_remote_sessions() {
     echo "Attempting to kill remote tmux session '$REMOTE_SESSION_NAME' on all servers..."
@@ -564,11 +643,28 @@ if [ "$KILL_MODE" = true ]; then
     kill_remote_sessions # Call the new function
 fi
 
+# --- Execute Toggle Layout Mode ---
+# If in toggle mode, execute the dedicated function and exit immediately.
+# Requires LOCAL_SESSION_NAME to be determined first.
+if [ "$TOGGLE_LAYOUT_MODE" = true ]; then
+    if [ -z "$LOCAL_SESSION_NAME" ]; then
+         echo "Error: Cannot toggle layout without knowing the local session name." >&2
+         echo "Please specify --local-session <name> when calling toggle-layout." >&2
+         # Attempt to guess if only one session exists? Risky.
+         exit 1
+    fi
+    toggle_layout "$LOCAL_SESSION_NAME" # Call the toggle function
+    # The toggle_layout function exits on completion or error
+fi
+
 # Destroy existing local session if it exists (prevents errors on re-run)
-tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null
-if [ $? -eq 0 ]; then
-    echo "Destroying existing local session: $LOCAL_SESSION_NAME"
-    tmux kill-session -t $LOCAL_SESSION_NAME
+# NB: This should NOT run if we are in toggle mode
+if [ "$TOGGLE_LAYOUT_MODE" = false ]; then
+    tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null
+    if [ $? -eq 0 ]; then
+        echo "Destroying existing local session: $LOCAL_SESSION_NAME"
+        tmux kill-session -t $LOCAL_SESSION_NAME
+    fi
 fi
 
 # Check if tmux is installed (skip if only using copy mode)
@@ -686,6 +782,12 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
         target="$LOCAL_SESSION_NAME:0.$i"
     fi
     
+    # Store the server name associated with this target pane/window's main pane
+    # Use -p flag for pane-specific option, -w for window option if preferred
+    # Let's use pane-specific option for break-pane retrieval
+    echo "Setting @multi_ssh_server_name=$server for target $target"
+    tmux set-option -t "$target" @multi_ssh_server_name "$server"
+
     # Disable shell history in the local pane/window
     tmux send-keys -t "$target" "unset HISTFILE" C-m
 
@@ -757,9 +859,19 @@ fi
 if [ "$LAYOUT_MODE" = "pane" ]; then
     echo "Adding key binding (Prefix+S) to toggle pane synchronization."
     # Bind 'S' to run a shell command that toggles sync and displays status
-    # Using run-shell might help with execution context issues
     tmux bind S run-shell "tmux set-window-option synchronize-panes && tmux display-message -d 2000 'Synchronize Panes: #{?synchronize-panes,off,on}'"
 fi
+
+# Add key binding to toggle layout (works in either mode)
+# Use $0 which should be the path to the script, but might need adjustment
+# Pass the current session name to the script
+echo "Adding key binding (Prefix+L) to toggle layout."
+# Using #{pane_current_path} might be more robust if script is run via ./multi-ssh
+# Let's try constructing the command carefully. Need the script's absolute path ideally.
+# A simpler approach might be to assume 'multi-ssh' is in PATH or use a fixed path if known.
+# Let's try using $0 directly first, it often works in run-shell.
+# Ensure LOCAL_SESSION_NAME is correctly expanded *when the binding is set*.
+tmux bind L run-shell "$0 toggle-layout --local-session $LOCAL_SESSION_NAME"
 
 # Attach to the local tmux session
 tmux attach-session -t $LOCAL_SESSION_NAME

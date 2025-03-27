@@ -32,15 +32,15 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 **In-Session Commands:**
 
 *   **Toggle Pane Synchronization:** While in a `pane` layout session, press `Prefix + S` (e.g., `Ctrl+B` then `Shift+S`) to toggle the `synchronize-panes` option on or off for the current window.
+*   **Toggle Layout:** Press `Prefix + L` (e.g., `Ctrl+B` then `L`) to attempt switching between the 'pane' layout (one window, multiple panes) and the 'window' layout (one window per server). This feature is experimental.
 
 **Commands:**
 
 *   `send-keys [command]`: Sends the specified `command` string to all remote sessions without pressing Enter. If `command` is omitted, sends the server-specific command from the `[servers]` section of the config file (if defined).
 *   `exec [command]`: Executes the specified `command` on all remote sessions (sends the command followed by Enter). If `command` is omitted, executes the server-specific command from the `[servers]` section of the config file (if defined).
 *   `kill`: Kills the remote `tmux` sessions and the local `multi-ssh` session.
-*   `copy [remote:|]:src_path [remote:|]:dest_path`: Copies files using `rsync`. Use `remote:` prefix to indicate the path on the remote servers.
-    *   Upload: `copy local/path remote:/remote/path`
-    *   Download: `copy remote:/remote/path local/path`
+*   `copy [remote:|]:path [remote:|]:path`: Copy files between local and remote using rsync.
+*   `toggle-layout`: (Internal command used by keybinding) Toggles between pane and window layouts in an active session.
 
 **Examples:**
 
