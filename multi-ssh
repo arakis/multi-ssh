@@ -316,6 +316,91 @@ if [ ${#servers[@]} -eq 0 ] && [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = fals
     exit 1
 fi
 
+# Helper functions for copy mode (and now kill mode)
+setup_ssh_options() {
+    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    if [ -n "$SSH_KEY" ]; then
+        ssh_opts="$ssh_opts -i $SSH_KEY"
+    fi
+    echo "$ssh_opts"
+}
+
+get_server_address() {
+    local server="$1"
+    local server_addr="$server"
+    if [ -n "$SSH_USER" ]; then
+        server_addr="$SSH_USER@$server"
+    fi
+    echo "$server_addr"
+}
+
+# New function to handle killing remote sessions directly
+kill_remote_sessions() {
+    echo "Attempting to kill remote tmux session '$REMOTE_SESSION_NAME' on all servers..."
+
+    for i in $(seq 0 $((${#servers[@]}-1))); do
+        local server=${servers[$i]}
+        local ssh_opts=$(setup_ssh_options)
+        local server_addr=$(get_server_address "$server")
+
+        # Construct the remote command
+        local kill_cmd="tmux kill-session -t $REMOTE_SESSION_NAME"
+        if [ -n "$REMOTE_USER" ]; then
+            # If remote user is specified, run the kill command as that user via sudo
+            # Ensure sudo doesn't require a tty (-n) and runs in the background briefly (-b) if needed,
+            # though for kill-session, direct execution should be fine.
+            # Using direct command execution is generally preferred over complex sudo options.
+            kill_cmd="sudo -u $REMOTE_USER $kill_cmd"
+        fi
+
+        # Add error suppression for cases where the session doesn't exist
+        kill_cmd="$kill_cmd 2>/dev/null || true" # Proceed even if kill fails (e.g., session not found)
+
+        echo "Executing on $server: ssh $ssh_opts $server_addr \"$kill_cmd\""
+
+        # Execute the kill command via a non-interactive SSH session
+        ssh $ssh_opts $server_addr "$kill_cmd"
+
+        if [ $? -eq 0 ]; then
+            # Note: This only checks SSH connection success, not necessarily tmux kill success.
+            # The '|| true' in kill_cmd ensures SSH usually exits 0 unless the connection fails.
+            echo "Kill command sent to $server."
+        else
+            echo "Error sending kill command to $server."
+        fi
+        echo "------------------------"
+    done
+
+    echo "Finished sending kill commands to all servers."
+    # Optionally, kill the local session if it somehow exists (though it shouldn't be created in kill mode)
+    if tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
+        echo "Killing potentially existing local session: $LOCAL_SESSION_NAME"
+        tmux kill-session -t $LOCAL_SESSION_NAME
+    fi
+    exit 0
+}
+
+# Check if servers array is empty (config file not found or empty [servers] section)
+# Allow kill and copy modes even with empty server list initially (though they won't do much)
+if [ ${#servers[@]} -eq 0 ] && [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
+    echo "Error: No servers defined in the [servers] section of '$CONFIG_FILE' or config file not found." >&2
+    exit 1
+fi
+
+# --- Execute Kill Mode ---
+# If in kill mode, execute the dedicated function and exit immediately.
+# This happens *before* creating the local session.
+if [ "$KILL_MODE" = true ]; then
+    # Ensure servers are loaded if kill mode was specified
+    # (The server loading logic might need adjustment if it's currently *after* this check)
+    # Re-parse config if needed, although the current flow parses it before args.
+    if [ ${#servers[@]} -eq 0 ]; then
+         echo "Warning: No servers found in '$CONFIG_FILE'. Kill command will not be sent."
+         exit 1 # Or exit 0 depending on desired behavior for empty server list
+    fi
+    kill_remote_sessions # Call the new function
+fi
+
 # Destroy existing local session if it exists (prevents errors on re-run)
 tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null
 if [ $? -eq 0 ]; then
@@ -466,30 +551,25 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
         tmux send-keys -t "$target" "cd ~" C-m
     fi
     
-    if [ "$KILL_MODE" = true ]; then
-        # Kill the remote tmux session
-        tmux send-keys -t "$target" "tmux kill-session -t $REMOTE_SESSION_NAME 2>/dev/null || echo 'No remote session to kill'" C-m
-    else
-        # Normal mode - run the tmux command after potential user switch
-        tmux send-keys -t "$target" "$remote_cmd" C-m
-        
-        # Determine which command to use (if any)
-        command_to_send=""
-        if [ "$USE_SERVER_COMMAND" = true ] && [ -n "$server_command" ]; then
-            # Use server-specific command from servers.conf
-            command_to_send="$server_command"
-        elif [ -n "$SEND_KEYS_COMMAND" ]; then
-            # Use global command specified with send-keys or exec
-            command_to_send="$SEND_KEYS_COMMAND"
-        fi
-        
-        # Send the command if one was determined
-        if [ -n "$command_to_send" ]; then
-            tmux send-keys -t "$target" "$command_to_send"
-            # Add ENTER if in execute mode
-            if [ "$EXECUTE_COMMAND" = true ]; then
-                tmux send-keys -t "$target" C-m
-            fi
+    # Normal mode - run the tmux command after potential user switch
+    tmux send-keys -t "$target" "$remote_cmd" C-m
+    
+    # Determine which command to use (if any)
+    command_to_send=""
+    if [ "$USE_SERVER_COMMAND" = true ] && [ -n "$server_command" ]; then
+        # Use server-specific command from servers.conf
+        command_to_send="$server_command"
+    elif [ -n "$SEND_KEYS_COMMAND" ]; then
+        # Use global command specified with send-keys or exec
+        command_to_send="$SEND_KEYS_COMMAND"
+    fi
+    
+    # Send the command if one was determined
+    if [ -n "$command_to_send" ]; then
+        tmux send-keys -t "$target" "$command_to_send"
+        # Add ENTER if in execute mode
+        if [ "$EXECUTE_COMMAND" = true ]; then
+            tmux send-keys -t "$target" C-m
         fi
     fi
 done
@@ -499,35 +579,8 @@ if [ "$SYNCHRONIZE_PANES" = true ]; then
     tmux set-window-option -t $LOCAL_SESSION_NAME:0 synchronize-panes on
 fi
 
-# If in kill mode, wait briefly for all commands to complete then kill local session
-if [ "$KILL_MODE" = true ]; then
-    # Wait a moment for all the exit commands to finish
-    sleep 2
-    tmux kill-session -t $LOCAL_SESSION_NAME
-    echo "All remote and local sessions killed."
-    exit 0
-fi
-
 # Attach to the local tmux session
 tmux attach-session -t $LOCAL_SESSION_NAME
-
-# Helper functions for copy mode
-setup_ssh_options() {
-    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-    if [ -n "$SSH_KEY" ]; then
-        ssh_opts="$ssh_opts -i $SSH_KEY"
-    fi
-    echo "$ssh_opts"
-}
-
-get_server_address() {
-    local server="$1"
-    local server_addr="$server"
-    if [ -n "$SSH_USER" ]; then
-        server_addr="$SSH_USER@$server"
-    fi
-    echo "$server_addr"
-}
 
 process_remote_path() {
     local path="$1"
