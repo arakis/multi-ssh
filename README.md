@@ -29,6 +29,10 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 *   `--servers <host1,...>`: Comma-separated list of specific servers to connect to. If provided, only these servers will be used, overriding/filtering the list in `servers.conf`. Servers not found in the config file will be included without a default command.
 *   `--initial-workdir <path>`: Change to this directory on remote hosts *after* connecting (and potentially switching user with `sudo su`) but *before* starting/attaching the remote `tmux` session. If not provided, the default behavior is maintained (no `cd` unless `--remote-user` is used, in which case it defaults to the remote user's home `~`).
 
+**In-Session Commands:**
+
+*   **Toggle Pane Synchronization:** While in a `pane` layout session, press `Prefix + S` (e.g., `Ctrl+B` then `Shift+S`) to toggle the `synchronize-panes` option on or off for the current window.
+
 **Commands:**
 
 *   `send-keys [command]`: Sends the specified `command` string to all remote sessions without pressing Enter. If `command` is omitted, sends the server-specific command from the `[servers]` section of the config file (if defined).

@@ -37,6 +37,8 @@ display_help() {
     echo "  --servers <host1,...>      Comma-separated list of servers to use (filters servers.conf)"
     echo "  --initial-workdir <path>   Change to this directory on remote hosts before starting tmux"
     echo
+    echo "In pane layout mode, use 'Prefix + S' (e.g., Ctrl+B then Shift+S) to toggle pane synchronization on/off."
+    echo
     echo "If no command is specified with send-keys or exec, commands from the config file's [servers] section will be used."
     echo
     echo "Configuration file format (e.g., servers.conf):"
@@ -749,6 +751,13 @@ done
 if [[ "$SYNCHRONIZE_PANES" = true && "$LAYOUT_MODE" = "pane" ]]; then
     echo "Enabling pane synchronization."
     tmux set-window-option -t $LOCAL_SESSION_NAME:0 synchronize-panes on
+fi
+
+# Add key binding to toggle synchronize-panes (only in pane mode)
+if [ "$LAYOUT_MODE" = "pane" ]; then
+    echo "Adding key binding (Prefix+S) to toggle pane synchronization."
+    # Bind 'S' (Shift+s) after the prefix (Ctrl+B by default) to toggle sync and display status
+    tmux bind S set-window-option synchronize-panes \; display-message 'Synchronize Panes: #{?synchronize-panes,on,off}'
 fi
 
 # Attach to the local tmux session
