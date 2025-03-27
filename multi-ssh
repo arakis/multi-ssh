@@ -25,6 +25,7 @@ display_help() {
     echo "  Layout & Session Options:"
     echo "  --layout <pane|window>     Specify layout: 'pane' (default, one window, multiple panes) or 'window' (one window per server)"
     echo "  --syncronize-panes         Enable synchronized input across panes (only valid with '--layout pane')"
+    echo "  --session <name>           Set both local and remote session name (overridden by specific session options)"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
     echo
@@ -71,8 +72,9 @@ display_help() {
 }
 
 # Default session names
-LOCAL_SESSION_NAME="multi-ssh"
-REMOTE_SESSION_NAME="remote-session"
+LOCAL_SESSION_NAME=""
+REMOTE_SESSION_NAME=""
+SESSION_NAME="" # New variable for --session option
 
 # Default remote user to switch to after connecting
 REMOTE_USER=""
@@ -260,6 +262,15 @@ while [[ $# -gt 0 ]]; do
                 shift 1
             fi
             ;;
+        --session)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                SESSION_NAME="$2" # Store the session name
+                shift 2
+            else
+                echo "Error: --session requires a name argument" >&2
+                exit 1
+            fi
+            ;;
         --local-session)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
                 LOCAL_SESSION_NAME="$2" # CLI overrides config
@@ -343,6 +354,29 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Apply the --session value after all options are parsed
+# Only set the session names if they weren't explicitly specified
+if [[ -n "$SESSION_NAME" ]]; then
+    # Set the local session name if not explicitly set
+    if [[ -z "$LOCAL_SESSION_NAME" ]]; then
+        LOCAL_SESSION_NAME="$SESSION_NAME"
+    fi
+    
+    # Set the remote session name if not explicitly set
+    if [[ -z "$REMOTE_SESSION_NAME" ]]; then
+        REMOTE_SESSION_NAME="$SESSION_NAME"
+    fi
+fi
+
+# After applying --session, set defaults if still not set
+if [[ -z "$LOCAL_SESSION_NAME" ]]; then
+    LOCAL_SESSION_NAME="multi-ssh"
+fi
+
+if [[ -z "$REMOTE_SESSION_NAME" ]]; then
+    REMOTE_SESSION_NAME="remote-session"
+fi
 
 # --- Validation ---
 # Check for incompatible options
