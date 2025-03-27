@@ -756,8 +756,9 @@ fi
 # Add key binding to toggle synchronize-panes (only in pane mode)
 if [ "$LAYOUT_MODE" = "pane" ]; then
     echo "Adding key binding (Prefix+S) to toggle pane synchronization."
-    # Bind 'S' (Shift+s) after the prefix (Ctrl+B by default) to toggle sync and display status
-    tmux bind S set-window-option synchronize-panes \; display-message 'Synchronize Panes: #{?synchronize-panes,on,off}'
+    # Bind 'S' to run a shell command that toggles sync and displays status
+    # Using run-shell might help with execution context issues
+    tmux bind S run-shell "tmux set-window-option synchronize-panes && tmux display-message -d 2000 'Synchronize Panes: #{?synchronize-panes,off,on}'"
 fi
 
 # Attach to the local tmux session
