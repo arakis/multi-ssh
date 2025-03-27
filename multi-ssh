@@ -31,6 +31,7 @@ display_help() {
     echo "  --ssh-user <username>      SSH login username"
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
     echo "  --config <path>            Path to servers configuration file (default: ./servers.conf)"
+    echo "  --servers <host1,...>      Comma-separated list of servers to use (filters servers.conf)"
     echo
     echo "If no command is specified with send-keys or exec, commands from the config file's [servers] section will be used."
     echo
@@ -89,10 +90,14 @@ KILL_MODE=false  # New option for killing remote sessions
 COPY_MODE=false  # New option for file copying
 SRC_PATH=""
 DEST_PATH=""
+FILTER_SERVERS_LIST="" # New variable for --servers option
 
 # Arrays to hold server addresses and their specific commands
 declare -a servers=()
 declare -a server_commands=()
+# Temporary arrays to store initial config data before filtering
+declare -a config_servers=()
+declare -a config_server_commands=()
 
 # Function to parse INI configuration file
 parse_ini_config() {
@@ -127,8 +132,9 @@ parse_ini_config() {
                 local server=$(echo "$line" | awk '{print $1}')
                 local command=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^[ \t]*//') # Get rest of line
                 if [[ -n "$server" ]]; then
-                    servers+=("$server")
-                    server_commands+=("$command")
+                    # Store in temporary config arrays first
+                    config_servers+=("$server")
+                    config_server_commands+=("$command")
                 fi
                 ;;
             options)
@@ -299,6 +305,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
              fi
             ;;
+        --servers)
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                FILTER_SERVERS_LIST="$2" # Store the comma-separated list
+                shift 2
+            else
+                echo "Error: --servers requires a comma-separated list of servers" >&2
+                exit 1
+            fi
+            ;;
         *)
             # If it's not a known option or command, it might be an implicit command for send-keys/exec
             # Or just an error. Let's assume error for now unless send-keys/exec was the *last* arg.
@@ -310,10 +325,60 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if servers array is empty (config file not found or empty [servers] section)
-if [ ${#servers[@]} -eq 0 ] && [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
-    echo "Error: No servers defined in the [servers] section of '$CONFIG_FILE' or config file not found." >&2
-    exit 1
+# --- Filter servers based on --servers option ---
+if [[ -n "$FILTER_SERVERS_LIST" ]]; then
+    echo "Filtering servers based on --servers option: $FILTER_SERVERS_LIST"
+    declare -a requested_servers=()
+    # Split the comma-separated list into an array
+    IFS=',' read -ra requested_servers <<< "$FILTER_SERVERS_LIST"
+
+    # Create a map for quick lookup of config servers and their commands
+    declare -A config_server_map
+    for i in "${!config_servers[@]}"; do
+        config_server_map["${config_servers[$i]}"]="${config_server_commands[$i]}"
+    done
+
+    # Clear the final server arrays and rebuild based on the requested list
+    servers=()
+    server_commands=()
+
+    for req_server in "${requested_servers[@]}"; do
+        # Trim whitespace just in case
+        req_server=$(echo "$req_server" | xargs)
+        if [[ -v config_server_map["$req_server"] ]]; then
+            # Server found in config, use it and its command
+            servers+=("$req_server")
+            server_commands+=("${config_server_map["$req_server"]}")
+            echo "  -> Including '$req_server' (found in config)"
+        else
+            # Server not found in config, include it without a command
+            servers+=("$req_server")
+            server_commands+=("")
+            echo "  -> Including '$req_server' (not found in config)"
+        fi
+    done
+else
+    # No --servers filter, use all servers from the config file
+    servers=("${config_servers[@]}")
+    server_commands=("${config_server_commands[@]}")
+fi
+# --- End server filtering ---
+
+# Check if servers array is empty (config file not found or empty [servers] section, or filter resulted in empty list)
+if [ ${#servers[@]} -eq 0 ]; then
+    # Adjust error message slightly to account for filtering
+    if [[ -n "$FILTER_SERVERS_LIST" ]]; then
+        echo "Error: No servers matched the filter criteria from '$CONFIG_FILE'." >&2
+    elif [ ! -f "$CONFIG_FILE" ]; then
+         echo "Error: Configuration file '$CONFIG_FILE' not found." >&2
+    else
+         echo "Error: No servers defined in the [servers] section of '$CONFIG_FILE'." >&2
+    fi
+    # Allow kill and copy modes to proceed even if the list is empty now,
+    # they might have specific logic or warnings later.
+    if [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
+        exit 1
+    fi
 fi
 
 # Helper functions for copy mode (and now kill mode)
@@ -380,23 +445,14 @@ kill_remote_sessions() {
     exit 0
 }
 
-# Check if servers array is empty (config file not found or empty [servers] section)
-# Allow kill and copy modes even with empty server list initially (though they won't do much)
-if [ ${#servers[@]} -eq 0 ] && [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
-    echo "Error: No servers defined in the [servers] section of '$CONFIG_FILE' or config file not found." >&2
-    exit 1
-fi
-
 # --- Execute Kill Mode ---
 # If in kill mode, execute the dedicated function and exit immediately.
 # This happens *before* creating the local session.
 if [ "$KILL_MODE" = true ]; then
-    # Ensure servers are loaded if kill mode was specified
-    # (The server loading logic might need adjustment if it's currently *after* this check)
-    # Re-parse config if needed, although the current flow parses it before args.
+    # Check server list *after* potential filtering
     if [ ${#servers[@]} -eq 0 ]; then
-         echo "Warning: No servers found in '$CONFIG_FILE'. Kill command will not be sent."
-         exit 1 # Or exit 0 depending on desired behavior for empty server list
+         echo "Warning: Server list is empty (due to config or filter). Kill command will not be sent."
+         exit 1 # Or exit 0 depending on desired behavior
     fi
     kill_remote_sessions # Call the new function
 fi
@@ -414,20 +470,29 @@ if [ "$COPY_MODE" = false ] && ! command -v tmux &> /dev/null; then
     exit 1
 fi
 
-# Check if specified config file exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Error: Configuration file '$CONFIG_FILE' not found."
+# Check if specified config file exists (This check might be less relevant now if --servers is used without a config)
+# Keep it for cases where --servers isn't used or relies on config commands
+if [[ -z "$FILTER_SERVERS_LIST" && ! -f "$CONFIG_FILE" ]]; then
+    echo "Error: Configuration file '$CONFIG_FILE' not found and --servers not specified."
     exit 1
 fi
 
-# Ensure config file has at least one server
+# Ensure we have servers to work with (redundant with the check after filtering, but safe)
 if [ ${#servers[@]} -eq 0 ]; then
-    echo "No servers found in '$CONFIG_FILE'"
-    exit 1
+    # Allow kill/copy modes to proceed, error for normal mode
+    if [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
+        echo "Error: No servers to connect to (check config file and --servers filter)."
+        exit 1
+    fi
 fi
 
 # If in copy mode, perform the rsync operations and exit
 if [ "$COPY_MODE" = true ]; then
+    # Check server list *after* potential filtering
+    if [ ${#servers[@]} -eq 0 ]; then
+        echo "Warning: Server list is empty (due to config or filter). Copy command will not be executed."
+        exit 1 # Or exit 0
+    fi
     # Process each server
     for i in $(seq 0 $((${#servers[@]}-1))); do
         server=${servers[$i]}
