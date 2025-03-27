@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script creates a local tmux session and connects to remote servers from servers.conf.
+# This script creates a local tmux session and connects to remote servers from a config file.
 # For each server, it establishes an SSH connection and creates or attaches to a remote tmux session.
 # If the script is run multiple times, it destroys any existing local session and creates a new one.
 
@@ -8,7 +8,7 @@
 display_help() {
     echo "Usage: multi-ssh [OPTIONS]"
     echo
-    echo "Creates a local tmux session and connects to remote servers listed in servers.conf."
+    echo "Creates a local tmux session and connects to remote servers listed in the config file."
     echo "For each server, it establishes an SSH connection and creates or attaches to a tmux session."
     echo
     echo "Options:"
@@ -17,7 +17,7 @@ display_help() {
     echo
     echo "  Main Commands:"
     echo "  send-keys [command]        Sends keys to each remote session without executing"
-    echo "  exec [command]             Executes the specified command on each remote session" 
+    echo "  exec [command]             Executes the specified command on each remote session"
     echo "  kill                       Kill remote tmux sessions and exit"
     echo "  copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
     echo
@@ -32,21 +32,32 @@ display_help() {
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
     echo "  --config <path>            Path to servers configuration file (default: ./servers.conf)"
     echo
-    echo "If no command is specified with send-keys or exec, commands from servers.conf will be used."
+    echo "If no command is specified with send-keys or exec, commands from the config file's [servers] section will be used."
     echo
-    echo "Configuration file format (servers.conf):"
-    echo "  Each line should contain a server address/hostname, optionally followed by a command."
-    echo "  Format: <server> [command]"
-    echo "  Examples:"
-    echo "    server1.example.com"
-    echo "    server2.example.com ls -la /var/log"
-    echo "    192.168.1.10 htop"
-    echo "  Lines starting with # are treated as comments and ignored."
+    echo "Configuration file format (e.g., servers.conf):"
+    echo "  [servers]"
+    echo "  # List servers, one per line. Optionally add a default command."
+    echo "  server1.example.com"
+    echo "  server2.example.com ls -la /var/log"
+    echo "  192.168.1.10 htop"
+    echo
+    echo "  [options]"
+    echo "  # Set default options (command-line flags override these)"
+    echo "  # Options correspond to long command-line flags without '--'"
+    echo "  # Example:"
+    echo "  # local-session = my-session"
+    echo "  # remote-session = remote-tmux"
+    echo "  # remote-user = appuser"
+    echo "  # ssh-user = admin"
+    echo "  # ssh-key = ~/.ssh/id_rsa_admin"
+    echo "  # synchronize-panes = true"
+    echo
+    echo "  Lines starting with # or ; are treated as comments and ignored."
     echo "  Empty lines are also ignored."
     echo
     echo "Examples:"
-    echo "  multi-ssh                                   # Connect to all servers"
-    echo "  multi-ssh --config ~/my-servers.conf        # Use a custom servers configuration file"
+    echo "  multi-ssh                                   # Connect to all servers using servers.conf"
+    echo "  multi-ssh --config ~/my-servers.ini         # Use a custom servers configuration file"
     echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
     echo "  multi-ssh exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
     echo "  multi-ssh kill                            # Kill all remote tmux sessions"
@@ -67,7 +78,7 @@ SSH_USER=""
 SSH_KEY=""
 
 # Default config file path
-CONFIG_FILE="servers.conf"
+CONFIG_FILE="./servers.conf"
 
 # Default options
 SYNCHRONIZE_PANES=false
@@ -78,6 +89,83 @@ KILL_MODE=false  # New option for killing remote sessions
 COPY_MODE=false  # New option for file copying
 SRC_PATH=""
 DEST_PATH=""
+
+# Arrays to hold server addresses and their specific commands
+declare -a servers=()
+declare -a server_commands=()
+
+# Function to parse INI configuration file
+parse_ini_config() {
+    local config_file="$1"
+    if [[ ! -f "$config_file" ]]; then
+        echo "Warning: Config file '$config_file' not found." >&2
+        return 1
+    fi
+
+    # Start assuming the implicit [servers] section
+    local current_section="servers"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Trim leading/trailing whitespace
+        line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+        # Skip empty lines and comments (lines starting with # or ;)
+        # Quote the regex pattern to treat '#' and ';' literally
+        if [[ -z "$line" || "$line" =~ "^[#;]" ]]; then
+            continue
+        fi
+
+        # Check for section header
+        if [[ "$line" =~ ^\[(.*)\]$ ]]; then
+            current_section="${BASH_REMATCH[1]}"
+            continue
+        fi
+
+        # Process lines based on section
+        case "$current_section" in
+            servers)
+                # Extract server and command
+                local server=$(echo "$line" | awk '{print $1}')
+                local command=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^[ \t]*//') # Get rest of line
+                if [[ -n "$server" ]]; then
+                    servers+=("$server")
+                    server_commands+=("$command")
+                fi
+                ;;
+            options)
+                # Process key-value pairs
+                if [[ "$line" =~ ^([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+                    local key="${BASH_REMATCH[1]}"
+                    local value="${BASH_REMATCH[2]}"
+                    # Trim potential quotes from value
+                    value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//')
+
+                    # Set global variables based on key (these might be overridden by CLI args later)
+                    case "$key" in
+                        local-session) LOCAL_SESSION_NAME="$value" ;;
+                        remote-session) REMOTE_SESSION_NAME="$value" ;;
+                        remote-user) REMOTE_USER="$value" ;;
+                        ssh-user) SSH_USER="$value" ;;
+                        ssh-key) SSH_KEY="$value" ;;
+                        synchronize-panes)
+                            if [[ "$value" == "true" || "$value" == "yes" || "$value" == "1" ]]; then
+                                SYNCHRONIZE_PANES=true
+                            elif [[ "$value" == "false" || "$value" == "no" || "$value" == "0" ]]; then
+                                SYNCHRONIZE_PANES=false
+                            else
+                                echo "Warning: Invalid boolean value '$value' for synchronize-panes in config file. Ignoring." >&2
+                            fi
+                            ;;
+                        *) echo "Warning: Unknown option '$key' in [options] section of config file." >&2 ;;
+                    esac
+                else
+                     echo "Warning: Malformed line in [options] section: '$line'" >&2
+                fi
+                ;;
+        esac
+    done < "$config_file"
+
+    return 0
+}
 
 # Handle the completion option
 if [[ "$1" == "completion" ]]; then
@@ -91,14 +179,38 @@ if [[ "$1" == "--help" || "$1" == "-h" ]]; then
     display_help
 fi
 
-# Parse command line arguments
+# Determine config file path *before* parsing other arguments
+# This allows --config to be processed correctly if it appears early
+temp_config_file="$CONFIG_FILE" # Use default initially
+i=1
+args=("$@")
+while [[ $i -le $# ]]; do
+    if [[ "${args[$((i-1))]}" == "--config" && -n "${args[$i]}" ]]; then
+        temp_config_file="${args[$i]}"
+        # Remove --config and its value from args for later parsing
+        unset args[$((i-1))]
+        unset args[$i]
+        args=("${args[@]}") # Re-index array
+        set -- "${args[@]}" # Reset positional parameters
+        break # Found config, stop searching
+    fi
+    ((i++))
+done
+CONFIG_FILE="$temp_config_file"
+
+# Parse the INI configuration file *first*
+# Settings here act as new defaults, potentially overridden by CLI args
+parse_ini_config "$CONFIG_FILE"
+
+# Parse command line arguments (these override config file settings)
 while [[ $# -gt 0 ]]; do
     case $1 in
         --help|-h)
+            # Already handled, but keep for completeness or if order changes
             display_help
             ;;
         --syncronize-panes)
-            SYNCHRONIZE_PANES=true
+            SYNCHRONIZE_PANES=true # CLI overrides config
             shift
             ;;
         kill)
@@ -121,172 +233,100 @@ while [[ $# -gt 0 ]]; do
             if [[ "$1" == "exec" ]]; then
                 EXECUTE_COMMAND=true
             fi
+            # Check if the next argument is a command and not another option
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                SEND_KEYS_COMMAND="$2"
+                SEND_KEYS_COMMAND="$2" # CLI overrides config/default behavior
+                USE_SERVER_COMMAND=false # Explicit command given, don't use server-specific ones
                 shift 2
             else
-                # No argument provided, use commands from servers.conf
+                # No command provided with send-keys/exec, use server-specific ones from config
                 USE_SERVER_COMMAND=true
-                shift
+                shift 1
             fi
             ;;
         --local-session)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                LOCAL_SESSION_NAME="$2"
+                LOCAL_SESSION_NAME="$2" # CLI overrides config
                 shift 2
             else
-                echo "Error: --local-session requires a name argument"
+                echo "Error: --local-session requires a name argument" >&2
                 exit 1
             fi
             ;;
         --remote-session)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                REMOTE_SESSION_NAME="$2"
+                REMOTE_SESSION_NAME="$2" # CLI overrides config
                 shift 2
             else
-                echo "Error: --remote-session requires a name argument"
+                echo "Error: --remote-session requires a name argument" >&2
                 exit 1
             fi
             ;;
         --remote-user)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                REMOTE_USER="$2"
+                REMOTE_USER="$2" # CLI overrides config
                 shift 2
             else
-                echo "Error: --remote-user requires a username argument"
+                echo "Error: --remote-user requires a username argument" >&2
                 exit 1
             fi
             ;;
         --ssh-user)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                SSH_USER="$2"
+                SSH_USER="$2" # CLI overrides config
                 shift 2
             else
-                echo "Error: --ssh-user requires a username argument"
+                echo "Error: --ssh-user requires a username argument" >&2
                 exit 1
             fi
             ;;
         --ssh-key)
             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                SSH_KEY="$2"
+                SSH_KEY="$2" # CLI overrides config
                 shift 2
             else
-                echo "Error: --ssh-key requires a path to key file"
+                echo "Error: --ssh-key requires a keyfile path argument" >&2
                 exit 1
             fi
             ;;
         --config)
-            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
-                CONFIG_FILE="$2"
+            # Already handled, just shift past the value if it remained somehow
+             if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
                 shift 2
-            else
-                echo "Error: --config requires a path to configuration file"
+             else
+                # Should have been handled, but error if value missing
+                echo "Error: --config requires a path argument" >&2
                 exit 1
-            fi
+             fi
             ;;
         *)
-            echo "Unknown option: $1"
-            echo "Use --help to display available options"
-            exit 1
+            # If it's not a known option or command, it might be an implicit command for send-keys/exec
+            # Or just an error. Let's assume error for now unless send-keys/exec was the *last* arg.
+            # This part is tricky. The current logic handles send-keys/exec [cmd] correctly.
+            # If we reach here, it's likely an unknown option.
+            echo "Error: Unknown option or misplaced argument: $1" >&2
+            display_help # Show help on error
             ;;
     esac
 done
 
-# Validate flag combinations
-if [ "$SYNCHRONIZE_PANES" = true ] && ([ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]); then
-    echo "Error: --syncronize-panes cannot be used together with send-keys or exec"
-    echo "Please use either --syncronize-panes or send-keys/exec, but not both"
+# Check if servers array is empty (config file not found or empty [servers] section)
+if [ ${#servers[@]} -eq 0 ] && [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
+    echo "Error: No servers defined in the [servers] section of '$CONFIG_FILE' or config file not found." >&2
     exit 1
 fi
 
-# Check that kill mode is not used with synchronized panes
-if [ "$SYNCHRONIZE_PANES" = true ] && [ "$KILL_MODE" = true ]; then
-    echo "Error: --syncronize-panes cannot be used together with kill"
-    echo "Please use either --syncronize-panes or kill, but not both"
-    exit 1
+# Destroy existing local session if it exists (prevents errors on re-run)
+tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null
+if [ $? -eq 0 ]; then
+    echo "Destroying existing local session: $LOCAL_SESSION_NAME"
+    tmux kill-session -t $LOCAL_SESSION_NAME
 fi
-
-# Validate copy mode arguments
-if [ "$COPY_MODE" = true ]; then
-    # Check if at least one path has the remote: prefix
-    if [[ ! "$SRC_PATH" =~ ^remote: && ! "$DEST_PATH" =~ ^remote: ]]; then
-        echo "Error: At least one path must have the 'remote:' prefix in copy mode"
-        echo "Usage: copy [remote:|]:source_path [remote:|]:destination_path"
-        exit 1
-    fi
-    
-    # Check for incompatible flags
-    if [ "$SYNCHRONIZE_PANES" = true ] || [ "$KILL_MODE" = true ] || [ -n "$SEND_KEYS_COMMAND" ] || [ "$USE_SERVER_COMMAND" = true ] || [ "$EXECUTE_COMMAND" = true ]; then
-        echo "Error: copy cannot be used with other operational flags"
-        echo "Please use only copy with its arguments"
-        exit 1
-    fi
-    
-    # Ensure rsync is installed
-    if ! command -v rsync &> /dev/null; then
-        echo "Error: rsync is not installed. Please install rsync and try again."
-        exit 1
-    fi
-fi
-
-# Helper functions for copy mode
-setup_ssh_options() {
-    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-    if [ -n "$SSH_KEY" ]; then
-        ssh_opts="$ssh_opts -i $SSH_KEY"
-    fi
-    echo "$ssh_opts"
-}
-
-get_server_address() {
-    local server="$1"
-    local server_addr="$server"
-    if [ -n "$SSH_USER" ]; then
-        server_addr="$SSH_USER@$server"
-    fi
-    echo "$server_addr"
-}
-
-process_remote_path() {
-    local path="$1"
-    # If remote user is specified, replace ~ with /home/username in remote path
-    if [ -n "$REMOTE_USER" ]; then
-        # Replace any occurrence of ~/ with the remote user's home directory
-        path="${path//\~\//\/home\/$REMOTE_USER\/}"
-        # Also handle standalone ~ (without trailing slash)
-        path="${path//\~/\/home\/$REMOTE_USER}"
-    fi
-    echo "$path"
-}
-
-build_rsync_command() {
-    local src="$1"
-    local dest="$2"
-    local ssh_opts="$3"
-    
-    local rsync_cmd="rsync -avz -e 'ssh $ssh_opts'"
-    
-    # Add remote user sudo if specified
-    if [ -n "$REMOTE_USER" ]; then
-        rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
-    fi
-    
-    # Complete the command with source and destination
-    rsync_cmd="$rsync_cmd \"$src\" \"$dest\""
-    
-    echo "$rsync_cmd"
-}
 
 # Check if tmux is installed (skip if only using copy mode)
 if [ "$COPY_MODE" = false ] && ! command -v tmux &> /dev/null; then
     echo "Error: tmux is not installed. Please install tmux and try again."
     exit 1
-fi
-
-# Check if the local tmux session already exists (skip if only using copy mode)
-if [ "$COPY_MODE" = false ] && tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
-    # Kill existing session
-    tmux kill-session -t $LOCAL_SESSION_NAME
 fi
 
 # Check if specified config file exists
@@ -470,3 +510,51 @@ fi
 
 # Attach to the local tmux session
 tmux attach-session -t $LOCAL_SESSION_NAME
+
+# Helper functions for copy mode
+setup_ssh_options() {
+    local ssh_opts="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    if [ -n "$SSH_KEY" ]; then
+        ssh_opts="$ssh_opts -i $SSH_KEY"
+    fi
+    echo "$ssh_opts"
+}
+
+get_server_address() {
+    local server="$1"
+    local server_addr="$server"
+    if [ -n "$SSH_USER" ]; then
+        server_addr="$SSH_USER@$server"
+    fi
+    echo "$server_addr"
+}
+
+process_remote_path() {
+    local path="$1"
+    # If remote user is specified, replace ~ with /home/username in remote path
+    if [ -n "$REMOTE_USER" ]; then
+        # Replace any occurrence of ~/ with the remote user's home directory
+        path="${path//\~\//\/home\/$REMOTE_USER\/}"
+        # Also handle standalone ~ (without trailing slash)
+        path="${path//\~/\/home\/$REMOTE_USER}"
+    fi
+    echo "$path"
+}
+
+build_rsync_command() {
+    local src="$1"
+    local dest="$2"
+    local ssh_opts="$3"
+    
+    local rsync_cmd="rsync -avz -e 'ssh $ssh_opts'"
+    
+    # Add remote user sudo if specified
+    if [ -n "$REMOTE_USER" ]; then
+        rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
+    fi
+    
+    # Complete the command with source and destination
+    rsync_cmd="$rsync_cmd \"$src\" \"$dest\""
+    
+    echo "$rsync_cmd"
+}
