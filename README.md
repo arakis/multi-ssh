@@ -18,10 +18,17 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 
 *   `--help`: Display the help message.
 *   `completion`: Output the path to the bash completion script.
+
+**Layout & Session Options:**
+
 *   `--layout <pane|window>`: Specify layout: `pane` (default, one window, multiple panes) or `window` (one window per server).
 *   `--syncronize-panes`: Enable synchronized input across panes (only valid with `--layout pane`, which is the default layout).
+*   `--session <name>`: Set both the local and remote `tmux` session names simultaneously. Overridden by `--local-session` and `--remote-session` if they are also provided.
 *   `--local-session <name>`: Set the local `tmux` session name (default: `multi-ssh`).
 *   `--remote-session <name>`: Set the remote `tmux` session name (default: `remote-session`).
+
+**Connection Options:**
+
 *   `--remote-user <username>`: Switch to `<username>` using `sudo su` after connecting remotely.
 *   `--ssh-user <username>`: Use `<username>` for the SSH connection.
 *   `--ssh-key <keyfile>`: Use the specified private key file for SSH authentication.
