@@ -11,14 +11,15 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 ./multi-ssh
 
 # Use a different configuration file
-./multi-ssh --config ~/my_servers.ini
+./multi-ssh --config ~/my_servers.conf
 ```
 
 **Options:**
 
 *   `--help`: Display the help message.
 *   `completion`: Output the path to the bash completion script.
-*   `--syncronize-panes`: Use a single window with synchronized panes instead of multiple windows.
+*   `--layout <pane|window>`: Specify layout: `pane` (default, one window, multiple panes) or `window` (one window per server).
+*   `--syncronize-panes`: Enable synchronized input across panes (only valid with `--layout pane`, which is the default layout).
 *   `--local-session <name>`: Set the local `tmux` session name (default: `multi-ssh`).
 *   `--remote-session <name>`: Set the remote `tmux` session name (default: `remote-session`).
 *   `--remote-user <username>`: Switch to `<username>` using `sudo su` after connecting remotely.
@@ -39,11 +40,14 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 **Examples:**
 
 ```bash
-# Connect normally (using ./servers.conf)
+# Connect normally (using ./servers.conf, default pane layout)
 ./multi-ssh
 
-# Connect with synchronized panes (overriding config if set differently)
+# Connect with synchronized panes (pane layout is default)
 ./multi-ssh --syncronize-panes
+
+# Connect using the window layout (one window per server)
+./multi-ssh --layout window
 
 # Connect using a specific SSH user and key (overriding config)
 ./multi-ssh --ssh-user admin --ssh-key ~/.ssh/id_admin
@@ -98,6 +102,7 @@ server2.example.com tail -f /var/log/app.log
 # ssh-user = deployer
 # ssh-key = /home/user/.ssh/deploy_key
 # synchronize-panes = true # Use true/yes/1 or false/no/0
+# layout = window          # Use 'pane' or 'window'
 
 # Alternatively, you can explicitly use the [servers] header:
 # [servers]
@@ -127,8 +132,8 @@ Technically, the `multi-ssh` script performs the following steps when establishi
 3.  **Local Session Management:** It creates (or replaces if it exists) a local `tmux` session (name determined by CLI > config > default). This session acts as the control center on your local machine.
 4.  **Server Processing:** It iterates through the final list of servers (either all from config or filtered by `--servers`).
 5.  **Local Window/Pane Setup:** For each server:
-    *   **Default Mode:** It creates a new `tmux` *window* within the local session.
-    *   **Sync Mode (`--syncronize-panes`):** It creates a new `tmux` *pane* within the first window of the local session. Pane synchronization is then enabled for this window.
+    *   **Default Mode (`--layout pane`):** It creates a new `tmux` *pane* within the first window (`window 0`) of the local session. If `--syncronize-panes` is also specified, pane synchronization is enabled for this window.
+    *   **Window Mode (`--layout window`):** It creates a new `tmux` *window* within the local session. `--syncronize-panes` is not compatible with this mode.
 6.  **SSH Connection:** It initiates an SSH connection to the server within the corresponding local window/pane. SSH options (user, key) are determined by CLI > config > defaults. The `-t` flag is used to allocate a pseudo-terminal.
 7.  **Remote User Switching (Optional):** If a remote user is specified (CLI > config), the script sends `sudo su <username>` and `cd ~` after the SSH connection.
 8.  **Remote Session Handling:** It sends a command to the remote server to create or attach to a remote `tmux` session (name determined by CLI > config > default).

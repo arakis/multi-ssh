@@ -9,6 +9,7 @@ display_help() {
     echo "Usage: multi-ssh [OPTIONS]"
     echo
     echo "Creates a local tmux session and connects to remote servers listed in the config file."
+    echo "By default, creates a single window with one pane per server."
     echo "For each server, it establishes an SSH connection and creates or attaches to a tmux session."
     echo
     echo "Options:"
@@ -21,8 +22,9 @@ display_help() {
     echo "  kill                       Kill remote tmux sessions and exit"
     echo "  copy [remote:|]:path [remote:|]:path   Copy files between local and remote using rsync"
     echo
-    echo "  Session Options:"
-    echo "  --syncronize-panes         Create a single window with multiple synchronized panes (one per server)"
+    echo "  Layout & Session Options:"
+    echo "  --layout <pane|window>     Specify layout: 'pane' (default, one window, multiple panes) or 'window' (one window per server)"
+    echo "  --syncronize-panes         Enable synchronized input across panes (only valid with '--layout pane')"
     echo "  --local-session <name>     Specify local tmux session name (default: multi-ssh)"
     echo "  --remote-session <name>    Specify remote tmux session name (default: remote-session)"
     echo
@@ -52,13 +54,14 @@ display_help() {
     echo "  # ssh-user = admin"
     echo "  # ssh-key = ~/.ssh/id_rsa_admin"
     echo "  # synchronize-panes = true"
+    echo "  # layout = window"
     echo
     echo "  Lines starting with # or ; are treated as comments and ignored."
     echo "  Empty lines are also ignored."
     echo
     echo "Examples:"
     echo "  multi-ssh                                   # Connect to all servers using servers.conf"
-    echo "  multi-ssh --config ~/my-servers.ini         # Use a custom servers configuration file"
+    echo "  multi-ssh --config ~/my-servers.conf         # Use a custom servers configuration file"
     echo "  multi-ssh --syncronize-panes                # Connect with synchronized panes"
     echo "  multi-ssh exec 'ls -la'                   # Connect and run 'ls -la' on all servers"
     echo "  multi-ssh kill                            # Kill all remote tmux sessions"
@@ -83,6 +86,7 @@ CONFIG_FILE="./servers.conf"
 
 # Default options
 SYNCHRONIZE_PANES=false
+LAYOUT_MODE="pane" # New default: 'pane' or 'window'
 SEND_KEYS_COMMAND=""
 USE_SERVER_COMMAND=false
 EXECUTE_COMMAND=false
@@ -159,6 +163,13 @@ parse_ini_config() {
                                 SYNCHRONIZE_PANES=false
                             else
                                 echo "Warning: Invalid boolean value '$value' for synchronize-panes in config file. Ignoring." >&2
+                            fi
+                            ;;
+                        layout) # Handle layout option from config
+                            if [[ "$value" == "pane" || "$value" == "window" ]]; then
+                                LAYOUT_MODE="$value"
+                            else
+                                echo "Warning: Invalid value '$value' for layout in config file. Must be 'pane' or 'window'. Ignoring." >&2
                             fi
                             ;;
                         *) echo "Warning: Unknown option '$key' in [options] section of config file." >&2 ;;
@@ -314,6 +325,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --layout) # Handle layout option from CLI
+            if [[ "$2" == "pane" || "$2" == "window" ]]; then
+                LAYOUT_MODE="$2" # CLI overrides config
+                shift 2
+            else
+                echo "Error: --layout requires 'pane' or 'window' argument" >&2
+                exit 1
+            fi
+            ;;
         *)
             # If it's not a known option or command, it might be an implicit command for send-keys/exec
             # Or just an error. Let's assume error for now unless send-keys/exec was the *last* arg.
@@ -324,6 +344,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# --- Validation ---
+# Check for incompatible options
+if [[ "$LAYOUT_MODE" == "window" && "$SYNCHRONIZE_PANES" = true ]]; then
+    echo "Error: --syncronize-panes cannot be used with --layout window." >&2
+    exit 1
+fi
 
 # --- Filter servers based on --servers option ---
 if [[ -n "$FILTER_SERVERS_LIST" ]]; then
@@ -554,30 +581,32 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     server_command=${server_commands[$i]}
     
     if [ $i -eq 0 ]; then
-        # For the first server, rename the initial window
+        # For the first server, rename the initial window/pane's window
         tmux rename-window -t $LOCAL_SESSION_NAME:0 "$server"
     else
-        if [ "$SYNCHRONIZE_PANES" = true ]; then
-            # Create a new pane for each additional server when sync is enabled
+        # Create new window or pane based on layout mode
+        if [ "$LAYOUT_MODE" = "window" ]; then
+            # Create a new window for each additional server
+            tmux new-window -t $LOCAL_SESSION_NAME: -n "$server"
+        else # LAYOUT_MODE is "pane"
+            # Create a new pane for each additional server
             tmux split-window -t $LOCAL_SESSION_NAME:0 -v
             # Ensure even layout for all panes
             tmux select-layout -t $LOCAL_SESSION_NAME:0 tiled
-        else
-            # Create a new window for each additional server (original behavior)
-            tmux new-window -t $LOCAL_SESSION_NAME: -n "$server"
         fi
     fi
     
-    # Determine target for send-keys
-    if [ "$SYNCHRONIZE_PANES" = true ]; then
-        # When using panes, we need to target the specific pane
-        target="$LOCAL_SESSION_NAME:0.$i"
-    else
-        # When using windows, we target the window
+    # Determine target for send-keys based on layout mode
+    target=""
+    if [ "$LAYOUT_MODE" = "window" ]; then
+        # When using windows, we target the window index
         target="$LOCAL_SESSION_NAME:$i"
+    else # LAYOUT_MODE is "pane"
+        # When using panes, we target the pane index within window 0
+        target="$LOCAL_SESSION_NAME:0.$i"
     fi
     
-    # Disable shell history in the local pane
+    # Disable shell history in the local pane/window
     tmux send-keys -t "$target" "unset HISTFILE" C-m
 
     # Build SSH command with optional parameters
@@ -623,8 +652,9 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     fi
 done
 
-# Enable synchronize-panes if the flag was set
-if [ "$SYNCHRONIZE_PANES" = true ]; then
+# Enable synchronize-panes if the flag was set AND layout is pane
+if [[ "$SYNCHRONIZE_PANES" = true && "$LAYOUT_MODE" = "pane" ]]; then
+    echo "Enabling pane synchronization."
     tmux set-window-option -t $LOCAL_SESSION_NAME:0 synchronize-panes on
 fi
 

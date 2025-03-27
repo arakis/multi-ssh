@@ -8,7 +8,7 @@ _multi_ssh_completion() {
     
     # Group options in a more meaningful order
     # Help and info options, main commands, session options, connection options
-    opts="--help completion send-keys exec kill copy --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config --servers"
+    opts="--help completion send-keys exec kill copy --layout --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config --servers"
 
     # Check if we're completing a copy operation anywhere in the command
     local i
@@ -55,91 +55,57 @@ _multi_ssh_completion() {
         return 0
     fi
 
+    # Handle completion for options that take arguments
     case "$prev" in
-        --ssh-key|--config)
-            # Provide file completion for files
-            COMPREPLY=( $(compgen -f -- ${cur}) )
-            return 0
-            ;;
-        copy)
-            # Check if we're dealing with a remote:local format
-            if [[ ${cur} == *:* ]]; then
-                # Split at the colon
-                local remote_part="${cur%%:*}"
-                local local_part="${cur#*:}"
-                
-                # Complete the local part but preserve the remote part
-                local completions=($(compgen -f -- "${local_part}"))
-                COMPREPLY=()
-                for comp in "${completions[@]}"; do
-                    COMPREPLY+=("${remote_part}:${comp}")
-                done
-            else
-                # Add "remote:" as a completion option along with standard file completion
-                local completions=($(compgen -f -- "${cur}"))
-                
-                # Only add remote: as an option if it matches the current prefix
-                if [[ "remote:" =~ ^"${cur}" ]]; then
-                    completions+=("remote:")
-                fi
-                
-                COMPREPLY=("${completions[@]}")
-            fi
-            return 0
-            ;;
         --local-session|--remote-session|--remote-user|--ssh-user)
-            # These options expect an argument, don't complete anything
+            # No specific suggestions, default completion (e.g., usernames) might apply
+            return 0
+            ;;
+        --ssh-key|--config)
+            # Suggest files/directories
+            COMPREPLY=($(compgen -f -- ${cur}))
             return 0
             ;;
         --servers)
+            # No specific suggestions for server list
+            return 0
+            ;;
+        --layout)
+            # Suggest layout modes
+            COMPREPLY=($(compgen -W "pane window" -- ${cur}))
             return 0
             ;;
         send-keys|exec)
-            # No specific completion for the command string itself
+            # No specific suggestions for commands
             return 0
             ;;
-        *)
-            # Complete with available options
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-                return 0
+        copy)
+             # Suggest files/directories or "remote:" for the first copy argument
+            if [[ "remote:" == "${cur}"* ]]; then
+                 COMPREPLY=($(compgen -f -P "remote:" -- ${cur#remote:}) $(compgen -f -- ${cur}) "remote:")
+            else
+                 COMPREPLY=($(compgen -f -- ${cur}) "remote:")
             fi
-            
-            # If we just completed a remote:path and are at a new argument position
-            if [[ $copy_mode -eq 1 && $COMP_CWORD -eq $((i+2)) ]]; then
-                # Provide file completion and remote: for the destination
-                if [[ ${cur} == *:* ]]; then
-                    # Split at the colon
-                    local remote_part="${cur%%:*}"
-                    local local_part="${cur#*:}"
-                    
-                    # Complete the local part but preserve the remote part
-                    local completions=($(compgen -f -- "${local_part}"))
-                    COMPREPLY=()
-                    for comp in "${completions[@]}"; do
-                        COMPREPLY+=("${remote_part}:${comp}")
-                    done
-                else
-                    # Add "remote:" as a completion option along with standard file completion
-                    local completions=($(compgen -f -- "${cur}"))
-                    
-                    # Only add remote: as an option if it matches the current prefix
-                    if [[ "remote:" =~ ^"${cur}" ]]; then
-                        completions+=("remote:")
-                    fi
-                    
-                    COMPREPLY=("${completions[@]}")
-                fi
-                return 0
+            _filedir # Use bash-completion's file/dir helper
+            # Add remote: back if it was filtered out by _filedir
+            if [[ "remote:" == "${cur}"* ]] && ! [[ " ${COMPREPLY[@]} " =~ " remote: " ]]; then
+                 COMPREPLY+=("remote:")
             fi
-            
-            # If we reach here, suggest all available options that don't start with --
-            # This ensures we suggest the verb commands like 'copy', 'kill', etc.
-            local verb_opts=$(echo "${opts}" | tr ' ' '\n' | grep -v '^--' | tr '\n' ' ')
-            COMPREPLY=( $(compgen -W "${verb_opts}" -- ${cur}) )
             return 0
             ;;
     esac
+
+    # If the previous word was not an option that takes an argument,
+    # suggest options or main commands.
+    if [[ $cur == -* ]]; then
+        COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+    else
+        # Suggest main commands if not starting with '-' (completion is usually first)
+        local commands="send-keys exec kill copy"
+        COMPREPLY=($(compgen -W "${commands}" -- ${cur}))
+    fi
+
+    return 0
 }
 
 complete -F _multi_ssh_completion multi-ssh 
