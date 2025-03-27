@@ -27,6 +27,7 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 *   `--ssh-key <keyfile>`: Use the specified private key file for SSH authentication.
 *   `--config <path>`: Path to the server configuration file (default: `./servers.conf`).
 *   `--servers <host1,...>`: Comma-separated list of specific servers to connect to. If provided, only these servers will be used, overriding/filtering the list in `servers.conf`. Servers not found in the config file will be included without a default command.
+*   `--initial-workdir <path>`: Change to this directory on remote hosts *after* connecting (and potentially switching user with `sudo su`) but *before* starting/attaching the remote `tmux` session. If not provided, the default behavior is maintained (no `cd` unless `--remote-user` is used, in which case it defaults to the remote user's home `~`).
 
 **Commands:**
 
@@ -103,6 +104,7 @@ server2.example.com tail -f /var/log/app.log
 # ssh-key = /home/user/.ssh/deploy_key
 # synchronize-panes = true # Use true/yes/1 or false/no/0
 # layout = window          # Use 'pane' or 'window'
+# initial-workdir = /srv/app # Change to this dir on remote hosts
 
 # Alternatively, you can explicitly use the [servers] header:
 # [servers]

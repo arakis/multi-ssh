@@ -35,6 +35,7 @@ display_help() {
     echo "  --ssh-key <keyfile>        Path to private key file for SSH"
     echo "  --config <path>            Path to servers configuration file (default: ./servers.conf)"
     echo "  --servers <host1,...>      Comma-separated list of servers to use (filters servers.conf)"
+    echo "  --initial-workdir <path>   Change to this directory on remote hosts before starting tmux"
     echo
     echo "If no command is specified with send-keys or exec, commands from the config file's [servers] section will be used."
     echo
@@ -56,6 +57,7 @@ display_help() {
     echo "  # ssh-key = ~/.ssh/id_rsa_admin"
     echo "  # synchronize-panes = true"
     echo "  # layout = window"
+    echo "  # initial-workdir = /var/www/project"
     echo
     echo "  Lines starting with # or ; are treated as comments and ignored."
     echo "  Empty lines are also ignored."
@@ -82,6 +84,7 @@ REMOTE_USER=""
 # Default SSH connection options
 SSH_USER=""
 SSH_KEY=""
+INITIAL_WORKDIR="" # New variable for initial working directory
 
 # Default config file path
 CONFIG_FILE="./servers.conf"
@@ -173,6 +176,7 @@ parse_ini_config() {
                                 echo "Warning: Invalid value '$value' for layout in config file. Must be 'pane' or 'window'. Ignoring." >&2
                             fi
                             ;;
+                        initial-workdir) INITIAL_WORKDIR="$value" ;;
                         *) echo "Warning: Unknown option '$key' in [options] section of config file." >&2 ;;
                     esac
                 else
@@ -341,6 +345,15 @@ while [[ $# -gt 0 ]]; do
                 shift 2
             else
                 echo "Error: --layout requires 'pane' or 'window' argument" >&2
+                exit 1
+            fi
+            ;;
+        --initial-workdir) # New case
+            if [[ -n "$2" && ! "$2" =~ ^--* ]]; then
+                INITIAL_WORKDIR="$2" # CLI overrides config
+                shift 2
+            else
+                echo "Error: --initial-workdir requires a path argument" >&2
                 exit 1
             fi
             ;;
@@ -688,13 +701,28 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     # Send SSH command to the target
     tmux send-keys -t "$target" "$ssh_cmd" C-m
 
-    # if remote user is set, send sudo su $REMOTE_USER before running tmux
+    # Handle user switching and initial working directory
     if [ -n "$REMOTE_USER" ]; then
         tmux send-keys -t "$target" "sudo su $REMOTE_USER" C-m
-        tmux send-keys -t "$target" "cd ~" C-m
+        # Determine directory after switching user
+        if [ -n "$INITIAL_WORKDIR" ]; then
+            # Use specified workdir (quote path for safety)
+            tmux send-keys -t "$target" "cd \"$INITIAL_WORKDIR\"" C-m
+        else
+            # Default to remote user's home if no specific workdir provided
+            tmux send-keys -t "$target" "cd ~" C-m
+        fi
+    else
+        # No remote user switch
+        # Change directory if initial workdir is specified
+        if [ -n "$INITIAL_WORKDIR" ]; then
+            # Use specified workdir (quote path for safety)
+            tmux send-keys -t "$target" "cd \"$INITIAL_WORKDIR\"" C-m
+        fi
+        # If neither REMOTE_USER nor INITIAL_WORKDIR is set, do nothing extra (stay in default SSH login dir)
     fi
-    
-    # Normal mode - run the tmux command after potential user switch
+
+    # Normal mode - run the tmux command after potential user switch and cd
     tmux send-keys -t "$target" "$remote_cmd" C-m
     
     # Determine which command to use (if any)

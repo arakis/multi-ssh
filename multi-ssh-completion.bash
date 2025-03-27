@@ -8,7 +8,7 @@ _multi_ssh_completion() {
     
     # Group options in a more meaningful order
     # Help and info options, main commands, session options, connection options
-    opts="--help completion send-keys exec kill copy --layout --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config --servers"
+    opts="--help --syncronize-panes kill copy send-keys exec --session --local-session --remote-session --remote-user --ssh-user --ssh-key --config --servers --layout --initial-workdir completion"
 
     # Check if we're completing a copy operation anywhere in the command
     local i
@@ -61,9 +61,9 @@ _multi_ssh_completion() {
             # No specific suggestions, default completion (e.g., usernames) might apply
             return 0
             ;;
-        --ssh-key|--config)
+        --ssh-key|--config|--initial-workdir)
             # Suggest files/directories
-            COMPREPLY=($(compgen -f -- ${cur}))
+            _filedir # Use bash-completion's file/dir helper
             return 0
             ;;
         --servers)
