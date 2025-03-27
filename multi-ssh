@@ -425,6 +425,38 @@ get_server_address() {
     echo "$server_addr"
 }
 
+# Process remote paths, replacing ~ with the user's home directory
+process_remote_path() {
+    local path="$1"
+    # If remote user is specified, replace ~ with /home/username in remote path
+    if [ -n "$REMOTE_USER" ]; then
+        # Replace any occurrence of ~/ with the remote user's home directory
+        path="${path//\~\//\/home\/$REMOTE_USER\/}"
+        # Also handle standalone ~ (without trailing slash)
+        path="${path//\~/\/home\/$REMOTE_USER}"
+    fi
+    echo "$path"
+}
+
+# Build the rsync command with appropriate options
+build_rsync_command() {
+    local src="$1"
+    local dest="$2"
+    local ssh_opts="$3"
+    
+    local rsync_cmd="rsync -avz -e 'ssh $ssh_opts'"
+    
+    # Add remote user sudo if specified
+    if [ -n "$REMOTE_USER" ]; then
+        rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
+    fi
+    
+    # Complete the command with source and destination
+    rsync_cmd="$rsync_cmd \"$src\" \"$dest\""
+    
+    echo "$rsync_cmd"
+}
+
 # New function to handle killing remote sessions directly
 kill_remote_sessions() {
     echo "Attempting to kill remote tmux session '$REMOTE_SESSION_NAME' on all servers..."
@@ -659,33 +691,3 @@ fi
 
 # Attach to the local tmux session
 tmux attach-session -t $LOCAL_SESSION_NAME
-
-process_remote_path() {
-    local path="$1"
-    # If remote user is specified, replace ~ with /home/username in remote path
-    if [ -n "$REMOTE_USER" ]; then
-        # Replace any occurrence of ~/ with the remote user's home directory
-        path="${path//\~\//\/home\/$REMOTE_USER\/}"
-        # Also handle standalone ~ (without trailing slash)
-        path="${path//\~/\/home\/$REMOTE_USER}"
-    fi
-    echo "$path"
-}
-
-build_rsync_command() {
-    local src="$1"
-    local dest="$2"
-    local ssh_opts="$3"
-    
-    local rsync_cmd="rsync -avz -e 'ssh $ssh_opts'"
-    
-    # Add remote user sudo if specified
-    if [ -n "$REMOTE_USER" ]; then
-        rsync_cmd="$rsync_cmd --rsync-path=\"sudo -u $REMOTE_USER rsync\""
-    fi
-    
-    # Complete the command with source and destination
-    rsync_cmd="$rsync_cmd \"$src\" \"$dest\""
-    
-    echo "$rsync_cmd"
-}
