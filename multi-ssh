@@ -420,22 +420,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Load servers from the config file
-servers=()
-server_commands=()
-while IFS= read -r line || [ -n "$line" ]; do
-    # Skip empty lines and comments (lines starting with #)
-    if [ -n "$line" ] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
-        # Split the line by the first space character
-        server=$(echo "$line" | cut -d' ' -f1)
-        # Get the rest of the line as the command (if any)
-        command=$(echo "$line" | cut -s -d' ' -f2-)
-        
-        servers+=("$server")
-        server_commands+=("$command")
-    fi
-done < "$CONFIG_FILE"
-
 # Ensure config file has at least one server
 if [ ${#servers[@]} -eq 0 ]; then
     echo "No servers found in '$CONFIG_FILE'"
