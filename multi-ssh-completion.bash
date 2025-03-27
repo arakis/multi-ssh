@@ -8,7 +8,7 @@ _multi_ssh_completion() {
     
     # Group options in a more meaningful order
     # Help and info options, main commands, session options, connection options
-    opts="--help completion send-keys exec kill copy --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config"
+    opts="--help completion send-keys exec kill copy --syncronize-panes --local-session --remote-session --remote-user --ssh-user --ssh-key --config --servers"
 
     # Check if we're completing a copy operation anywhere in the command
     local i
@@ -89,6 +89,13 @@ _multi_ssh_completion() {
             ;;
         --local-session|--remote-session|--remote-user|--ssh-user)
             # These options expect an argument, don't complete anything
+            return 0
+            ;;
+        --servers)
+            return 0
+            ;;
+        send-keys|exec)
+            # No specific completion for the command string itself
             return 0
             ;;
         *)

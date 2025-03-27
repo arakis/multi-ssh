@@ -25,6 +25,7 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 *   `--ssh-user <username>`: Use `<username>` for the SSH connection.
 *   `--ssh-key <keyfile>`: Use the specified private key file for SSH authentication.
 *   `--config <path>`: Path to the server configuration file (default: `./servers.conf`).
+*   `--servers <host1,...>`: Comma-separated list of specific servers to connect to. If provided, only these servers will be used, overriding/filtering the list in `servers.conf`. Servers not found in the config file will be included without a default command.
 
 **Commands:**
 
@@ -68,6 +69,9 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 
 # Kill all associated remote and local tmux sessions
 ./multi-ssh kill
+
+# Connect only to specific servers, overriding the config list
+./multi-ssh --servers server1.example.com,192.168.1.10
 ```
 
 ## Configuration File (`servers.conf`)
@@ -118,10 +122,10 @@ Settings are applied in the following order, with later settings overriding earl
 
 Technically, the `multi-ssh` script performs the following steps when establishing connections (not using `kill`, `copy`, or `completion`):
 
-1.  **Configuration Loading:** It first parses the configuration file (`servers.conf` by default, or specified via `--config`) to load the server list and default options.
+1.  **Configuration Loading:** It first parses the configuration file (`servers.conf` by default, or specified via `--config`) to load the server list and default options. If `--servers` is provided, the server list from the config file is filtered based on this argument.
 2.  **Argument Parsing:** It then parses command-line arguments, which override any settings loaded from the configuration file.
 3.  **Local Session Management:** It creates (or replaces if it exists) a local `tmux` session (name determined by CLI > config > default). This session acts as the control center on your local machine.
-4.  **Server Processing:** It iterates through the list of servers obtained from the configuration file.
+4.  **Server Processing:** It iterates through the final list of servers (either all from config or filtered by `--servers`).
 5.  **Local Window/Pane Setup:** For each server:
     *   **Default Mode:** It creates a new `tmux` *window* within the local session.
     *   **Sync Mode (`--syncronize-panes`):** It creates a new `tmux` *pane* within the first window of the local session. Pane synchronization is then enabled for this window.
