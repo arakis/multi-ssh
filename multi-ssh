@@ -89,7 +89,7 @@ display_help() {
 # Default session names
 LOCAL_SESSION_NAME=""
 REMOTE_SESSION_NAME=""
-SESSION_NAME="" # New variable for --session option
+SESSION_NAME="" # Set via --session, overrides specific local/remote names
 
 # Default remote user to switch to after connecting
 REMOTE_USER=""
@@ -97,23 +97,23 @@ REMOTE_USER=""
 # Default SSH connection options
 SSH_USER=""
 SSH_KEY=""
-INITIAL_WORKDIR="" # New variable for initial working directory
+INITIAL_WORKDIR="" # Initial remote working directory before starting tmux
 
 # Default config file path
 CONFIG_FILE="./servers.conf"
 
 # Default options
 SYNCHRONIZE_PANES=false
-LAYOUT_MODE="pane" # New default: 'pane' or 'window'
+LAYOUT_MODE="pane" # Layout mode: 'pane' (default) or 'window'
 SEND_KEYS_COMMAND=""
 USE_SERVER_COMMAND=false
 EXECUTE_COMMAND=false
-KILL_MODE=false  # New option for killing remote sessions
-COPY_MODE=false  # New option for file copying
-TOGGLE_LAYOUT_MODE=false # New variable for layout toggling
+KILL_MODE=false      # If true, kill remote sessions instead of connecting
+COPY_MODE=false      # If true, copy files using rsync instead of connecting
+TOGGLE_LAYOUT_MODE=false # If true, toggle layout of existing session
 SRC_PATH=""
 DEST_PATH=""
-FILTER_SERVERS_LIST="" # New variable for --servers option
+FILTER_SERVERS_LIST="" # Comma-separated list from --servers to filter config
 
 # Arrays to hold server addresses and their specific commands
 declare -a servers=()
@@ -148,7 +148,7 @@ parse_ini_config() {
             # This is a simplistic approach for relative paths if realpath failed
              abs_config_path="$PWD/$config_file"
              # Basic normalization attempt: remove trailing /. and handle simple ..
-             abs_config_path=$(echo "$abs_config_path" | sed -e 's#/[^/]\+/\.\./#/#g' -e 's#/\./#/#g' -e 's#//*#/#g')
+             abs_config_path=$(echo "$abs_config_path" | sed -e 's#/\./#/#g' -e 's#/[^/]\+/\.\./#/#g')
 
         fi
          echo "Warning: Could not resolve absolute path for '$config_file' using realpath. Using simplified path '$abs_config_path'. Cycle detection might be less reliable." >&2
@@ -783,7 +783,7 @@ kill_remote_sessions() {
         fi
 
         # Add error suppression for cases where the session doesn't exist
-        kill_cmd="$kill_cmd 2>/dev/null || true" # Proceed even if kill fails (e.g., session not found)
+        kill_cmd="$kill_cmd 2>/dev/null || true" # Suppress errors if session doesn't exist, continue script
 
         echo "Executing on $server: ssh $ssh_opts $server_addr \"$kill_cmd\""
 
@@ -792,7 +792,7 @@ kill_remote_sessions() {
 
         if [ $? -eq 0 ]; then
             # Note: This only checks SSH connection success, not necessarily tmux kill success.
-            # The '|| true' in kill_cmd ensures SSH usually exits 0 unless the connection fails.
+            # Check SSH connection status (tmux kill success ignored due to '|| true')
             echo "Kill command sent to $server."
         else
             echo "Error sending kill command to $server."
@@ -802,6 +802,7 @@ kill_remote_sessions() {
 
     echo "Finished sending kill commands to all servers."
     # Optionally, kill the local session if it somehow exists (though it shouldn't be created in kill mode)
+    # Kill potentially lingering local session
     if tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null; then
         echo "Killing potentially existing local session: $LOCAL_SESSION_NAME"
         tmux kill-session -t $LOCAL_SESSION_NAME
@@ -811,12 +812,12 @@ kill_remote_sessions() {
 
 # --- Execute Kill Mode ---
 # If in kill mode, execute the dedicated function and exit immediately.
-# This happens *before* creating the local session.
+# Execute kill logic *before* creating the local session.
 if [ "$KILL_MODE" = true ]; then
     # Check server list *after* potential filtering
     if [ ${#servers[@]} -eq 0 ]; then
-         echo "Warning: Server list is empty (due to config or filter). Kill command will not be sent."
-         exit 1 # Or exit 0 depending on desired behavior
+        echo "Warning: Server list is empty (due to config or --servers filter). Kill command cannot be sent."
+        exit 1
     fi
     kill_remote_sessions # Call the new function
 fi
@@ -828,7 +829,7 @@ if [ "$TOGGLE_LAYOUT_MODE" = true ]; then
     if [ -z "$LOCAL_SESSION_NAME" ]; then
          echo "Error: Cannot toggle layout without knowing the local session name." >&2
          echo "Please specify --local-session <name> when calling toggle-layout." >&2
-         # Attempt to guess if only one session exists? Risky.
+         # Note: Guessing session name is too risky.
          exit 1
     fi
     toggle_layout "$LOCAL_SESSION_NAME" # Call the toggle function
@@ -836,7 +837,7 @@ if [ "$TOGGLE_LAYOUT_MODE" = true ]; then
 fi
 
 # Destroy existing local session if it exists (prevents errors on re-run)
-# NB: This should NOT run if we are in toggle mode
+# Do not kill existing session if only toggling layout.
 if [ "$TOGGLE_LAYOUT_MODE" = false ]; then
     tmux has-session -t $LOCAL_SESSION_NAME 2>/dev/null
     if [ $? -eq 0 ]; then
@@ -846,19 +847,21 @@ if [ "$TOGGLE_LAYOUT_MODE" = false ]; then
 fi
 
 # Check if tmux is installed (skip if only using copy mode)
-if [ "$COPY_MODE" = false ] && ! command -v tmux &> /dev/null; then
+if [ "$COPY_MODE" = false ] && ! command -v tmux &>/dev/null; then
+    # Check for tmux binary (unless only copying files).
     echo "Error: tmux is not installed. Please install tmux and try again."
     exit 1
 fi
 
 # Check if specified config file exists (This check might be less relevant now if --servers is used without a config)
-# Keep it for cases where --servers isn't used or relies on config commands
+# Config file existence check (less critical if using --servers without config commands).
 if [[ -z "$FILTER_SERVERS_LIST" && ! -f "$CONFIG_FILE" ]]; then
     echo "Error: Configuration file '$CONFIG_FILE' not found and --servers not specified."
     exit 1
 fi
 
 # Ensure we have servers to work with (redundant with the check after filtering, but safe)
+# Final check for servers after parsing config and applying filters.
 if [ ${#servers[@]} -eq 0 ]; then
     # Allow kill/copy modes to proceed, error for normal mode
     if [ "$COPY_MODE" = false ] && [ "$KILL_MODE" = false ]; then
@@ -870,6 +873,7 @@ fi
 # If in copy mode, perform the rsync operations and exit
 if [ "$COPY_MODE" = true ]; then
     # Check server list *after* potential filtering
+    # Ensure servers remain after filtering before attempting copy.
     if [ ${#servers[@]} -eq 0 ]; then
         echo "Warning: Server list is empty (due to config or filter). Copy command will not be executed."
         exit 1 # Or exit 0
@@ -967,6 +971,7 @@ for i in $(seq 0 $((${#servers[@]}-1))); do
     tmux set-option -t "$target" @multi_ssh_server_name "$server"
 
     # Disable shell history in the local pane/window
+    # Prevent polluting local shell history in the pane.
     tmux send-keys -t "$target" "unset HISTFILE" C-m
 
     # Build SSH command with optional parameters
