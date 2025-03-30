@@ -2,6 +2,8 @@
 
 `multi-ssh` is a command-line utility designed to simplify the management of simultaneous SSH connections to multiple remote servers. It leverages `tmux` to create organized sessions, allowing you to interact with servers in separate panes within a single window or in individual windows per server. Features include synchronized input across panes, executing commands on all servers, copying files using `rsync`, and customizable configurations via a config file.
 
+[![Click here for a demo](https://asciinema.org/a/grO4CnvXiJPOWDfXJAbQ8TRts.svg)](https://asciinema.org/a/grO4CnvXiJPOWDfXJAbQ8TRts)
+
 ## Usage
 
 ```bash
