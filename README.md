@@ -173,6 +173,37 @@ The script supports bash completion to help with options and commands.
     This command executes `multi-ssh completion`, which now outputs the completion script directly, and sources its output.
 2.  Reload your shell configuration (`source ~/.bashrc`) or open a new terminal.
 
+## A Powerful Alternative to pssh and clusterssh
+
+While tools like `pssh` excel at parallel non-interactive command execution and `clusterssh` provides synchronized input across multiple graphical terminal windows, `multi-ssh` offers a compelling alternative by deeply integrating with `tmux`.
+
+This approach provides several advantages:
+
+*   **Unified Terminal Interface:** Manages all connections within a single, familiar `tmux` session, avoiding window clutter.
+*   **Flexible Layouts:** Easily switch between viewing servers in panes (for side-by-side comparison or synchronized input) or dedicated windows within the same `tmux` session.
+*   **Remote Session Persistence:** Actively manages `tmux` sessions on the remote servers, allowing you to detach and re-attach without losing your work state.
+*   **Integrated Workflow:** Combines interactive sessions with powerful command-line execution (`exec`, `send-keys`), file transfer (`copy`), and session management (`kill`) capabilities.
+*   **Rich Configuration:** Define server groups, default commands per server, and connection parameters easily.
+*   **Terminal-Native:** Operates entirely within the terminal, requiring no graphical environment.
+
+If you are comfortable with `tmux` and seek a powerful, flexible, and session-oriented way to manage multiple servers interactively and programmatically, `multi-ssh` provides a robust solution.
+
+## Comparison with Similar Tools
+
+| Feature             | multi-ssh                      | pssh (parallel-ssh)           | clusterssh (cssh)                |
+| :------------------ | :----------------------------- | :---------------------------- | :------------------------------- |
+| **Paradigm**        | `tmux`-based session manager   | Parallel command executor     | Multi-window manager             |
+| **Interface**       | Single `tmux` session          | Command-line (non-interactive)| Multiple `xterm` windows + Console |
+| **Interaction**     | Interactive (within `tmux`)    | Non-interactive               | Interactive (console sync)       |
+| **Synchronization** | `tmux synchronize-panes`       | N/A (Parallel execution)      | Master console input broadcast   |
+| **Layout**          | Panes or Windows (toggleable)  | N/A                           | Separate graphical windows       |
+| **Remote Session**  | Manages remote `tmux` sessions | No                            | No                               |
+| **Built-in Copy**   | Yes (`rsync`)                  | Yes (`pscp`/`prsync`)         | No (Manual `scp`/`rsync`)        |
+| **Built-in Kill**   | Yes (Remote `tmux kill`)       | Yes (`pnuke`)                 | No (Manual `kill`)               |
+| **Configuration**   | Config file + CLI                 | Host file + CLI               | Config file + CLI                |
+| **Dependencies**    | `bash`, `tmux`, `ssh`, `rsync` | `python`, `ssh`               | `perl`, `ssh`, X11, `xterm`      |
+| **Primary Use Case**| Interactive `tmux` multi-admin | Batch command execution       | Graphical interactive multi-admin|
+
 ## Contributing
 
 Contributions, issues, and feature requests are welcome.
