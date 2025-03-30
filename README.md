@@ -220,4 +220,4 @@ Contributions, issues, and feature requests are welcome.
 
 ## License
 
-This project is open source. Please feel free to use, modify, and distribute it. (Consider adding a specific license like MIT if desired).
+This project is open source under the MIT license. Please feel free to use, modify, and distribute it.
