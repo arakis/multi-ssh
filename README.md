@@ -21,7 +21,7 @@ multi-ssh [OPTIONS] [COMMAND] [ARGS...]
 **Options:**
 
 *   `--help`: Display the help message.
-*   `completion`: Output the path to the bash completion script.
+*   `completion`: Output the completion function
 
 **Layout & Session Options:**
 
