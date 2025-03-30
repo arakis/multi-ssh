@@ -121,6 +121,15 @@ server2.example.com tail -f /var/log/app.log
 # layout = window          # Use 'pane' or 'window'
 # initial-workdir = /srv/app # Change to this dir on remote hosts
 
+[include]
+# Include other configuration files recursively.
+# Paths can be absolute or relative to the *current* file's directory.
+# Useful for sharing common settings or server lists.
+# Example:
+# /etc/multi-ssh/global_options.conf
+# ../shared/common_servers.conf
+# project_specific_dev.conf
+
 # Alternatively, you can explicitly use the [servers] header:
 # [servers]
 # server3.example.com
@@ -129,15 +138,16 @@ server2.example.com tail -f /var/log/app.log
 
 *   Lines starting with `#` or `;` are ignored as comments.
 *   Empty lines are ignored.
-*   The `[servers]` section lists target hosts, optionally followed by a default command for that host. **If server entries appear before any other section header (like `[options]`), the `[servers]` header itself can be omitted.**
-*   The `[options]` section allows setting default values for most command-line options.
+*   The `[servers]` section lists target hosts, optionally followed by a default command for that host. **If server entries appear before any other section header (like `[options]` or `[include]`), the `[servers]` header itself can be omitted.**
+*   The `[options]` section allows setting default values for most command-line options. Options are applied in the order they are encountered, potentially being overridden by later options in the same file or an including file, and finally by command-line arguments.
+*   The `[include]` section allows specifying other configuration files to load. Paths are interpreted relative to the file containing the `[include]` directive, unless they are absolute paths. Files are parsed recursively, and a mechanism prevents infinite loops caused by circular includes. Settings from included files are loaded as if they were pasted into the including file at the location of the include directive.
 
 **Configuration Precedence:**
 
 Settings are applied in the following order, with later settings overriding earlier ones:
 
 1.  Script Defaults (hardcoded in `multi-ssh`).
-2.  Configuration File (`servers.conf` or specified by `--config`).
+2.  Configuration Files: Settings are loaded sequentially. When a file is included, its contents are processed immediately before continuing with the rest of the including file. Therefore, settings within an included file are applied, then settings *after* the include directive in the parent file are applied (potentially overriding the included settings).
 3.  Command-Line Arguments (e.g., `--ssh-user`, `--syncronize-panes`).
 
 ## How it Works

@@ -63,6 +63,15 @@ display_help() {
     echo "  # layout = window"
     echo "  # initial-workdir = /var/www/project"
     echo
+    echo "  [include]"
+    echo "  # Include other configuration files. Paths can be absolute or relative"
+    echo "  # to the current file's location. Included files are parsed recursively."
+    echo "  # Cycle detection prevents infinite loops."
+    echo "  # Example:"
+    echo "  # /path/to/global.conf"
+    echo "  # ../shared/common-servers.conf"
+    echo "  # ./project-specific.conf"
+    echo
     echo "  Lines starting with # or ; are treated as comments and ignored."
     echo "  Empty lines are also ignored."
     echo
@@ -113,13 +122,49 @@ declare -a server_commands=()
 declare -a config_servers=()
 declare -a config_server_commands=()
 
+# New: Keep track of parsed config files to prevent infinite loops
+declare -A PARSED_CONFIG_FILES
+
 # Function to parse INI configuration file
 parse_ini_config() {
     local config_file="$1"
+    local config_dir
+    config_dir=$(dirname "$config_file") # Directory of the current config file
+
+    # Resolve the real path to prevent duplicates/loops with symlinks etc.
+    local abs_config_path
     if [[ ! -f "$config_file" ]]; then
         echo "Warning: Config file '$config_file' not found." >&2
         return 1
     fi
+    # Attempt to get the real path; handle potential errors if realpath isn't available or fails
+    abs_config_path=$(realpath "$config_file" 2>/dev/null)
+    if [[ $? -ne 0 || -z "$abs_config_path" ]]; then
+        # Fallback if realpath fails or isn't installed
+        # For basic relative paths within the same dir structure, this might suffice
+        if [[ "$config_file" == /* ]]; then
+            abs_config_path="$config_file"
+        else
+            # This is a simplistic approach for relative paths if realpath failed
+             abs_config_path="$PWD/$config_file"
+             # Basic normalization attempt: remove trailing /. and handle simple ..
+             abs_config_path=$(echo "$abs_config_path" | sed -e 's#/[^/]\+/\.\./#/#g' -e 's#/\./#/#g' -e 's#//*#/#g')
+
+        fi
+         echo "Warning: Could not resolve absolute path for '$config_file' using realpath. Using simplified path '$abs_config_path'. Cycle detection might be less reliable." >&2
+    fi
+
+
+    # Check for circular dependencies
+    if [[ -v PARSED_CONFIG_FILES["$abs_config_path"] ]]; then
+        echo "Warning: Skipping already parsed or currently parsing config file '$config_file' (path: $abs_config_path) to prevent circular dependency." >&2
+        return 0
+    fi
+    # Mark this file as being parsed
+    PARSED_CONFIG_FILES["$abs_config_path"]=1
+
+
+    echo "Parsing config file: $config_file" >&2 # Added for debugging includes
 
     # Start assuming the implicit [servers] section
     local current_section="servers"
@@ -135,6 +180,8 @@ parse_ini_config() {
         # Check for section header
         if [[ "$line" =~ ^\[(.*)\]$ ]]; then
             current_section="${BASH_REMATCH[1]}"
+            # Convert to lowercase for case-insensitive matching
+            current_section=$(echo "$current_section" | tr '[:upper:]' '[:lower:]')
             continue
         fi
 
@@ -187,6 +234,26 @@ parse_ini_config() {
                 else
                      echo "Warning: Malformed line in [options] section: '$line'" >&2
                 fi
+                ;;
+            include) # New section handler
+                # The line itself is the path to the file to include
+                local include_path="$line"
+                local resolved_include_path
+
+                # Resolve the path: absolute or relative to the current config file's directory
+                if [[ "$include_path" == /* ]]; then
+                    resolved_include_path="$include_path" # Absolute path
+                else
+                    resolved_include_path="$config_dir/$include_path" # Relative path
+                fi
+
+                # Recursively parse the included file
+                # The recursive call will handle its own path resolution and cycle detection
+                parse_ini_config "$resolved_include_path"
+                ;;
+            *)
+                # Handle unknown sections if needed, or ignore
+                # echo "Warning: Unknown section '$current_section' in config file '$config_file'." >&2
                 ;;
         esac
     done < "$config_file"
