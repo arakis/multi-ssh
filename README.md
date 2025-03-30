@@ -166,16 +166,12 @@ The `kill` command connects briefly to send a `tmux kill-session` command remote
 
 The script supports bash completion to help with options and commands.
 
-1.  Source the completion script in your shell environment. You can get the path to the completion script using:
+1.  Add the following line to your `~/.bashrc` or `~/.bash_profile` (make sure to replace `/path/to/multi-ssh` with the actual path to your script):
     ```bash
-    ./multi-ssh completion
-    # Example output: /path/to/multi-ssh-completion.bash
+    source <(/path/to/multi-ssh completion)
     ```
-2.  Add the following line to your `~/.bashrc` or `~/.bash_profile`, replacing the path with the actual output from the command above:
-    ```bash
-    source /path/to/multi-ssh-completion.bash
-    ```
-3.  Reload your shell configuration (`source ~/.bashrc`) or open a new terminal.
+    This command executes `multi-ssh completion`, which now outputs the completion script directly, and sources its output.
+2.  Reload your shell configuration (`source ~/.bashrc`) or open a new terminal.
 
 ## Contributing
 
